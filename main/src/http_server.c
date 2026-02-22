@@ -290,6 +290,11 @@ esp_err_t config_post_handler(httpd_req_t *req) {
         }
     }
 
+    cJSON *pullup_vref = cJSON_GetObjectItem(root, "pullup_vref_mv");
+    if (pullup_vref && cJSON_IsNumber(pullup_vref)) {
+        cfg.pullup_vref_mv = (uint16_t)pullup_vref->valueint;
+    }
+
     cJSON_Delete(root);
     free(buf);
 
