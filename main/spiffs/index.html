@@ -6,7 +6,6 @@
     <title>esp32-canboard - Config</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 0.6em 1.2em; }
-        .error { color: red; }
         .header-row { display:flex; align-items:center; justify-content:space-between; gap:1em; margin-bottom:0.6em; }
         h2 { margin: 0; }
         table { border-collapse: collapse; width: 100%; margin-bottom: 2em; table-layout: fixed; }
@@ -49,6 +48,86 @@
         .hex-input { width:6ch; }
         .small-input { width:5.5ch; }
         .hex-prefix { margin-right:0.2em; }
+        .overlay {
+            position: fixed;
+            inset: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.55);
+            z-index: 9999;
+        }
+        .overlay-card {
+            min-width: 260px;
+            max-width: 420px;
+            padding: 1rem 1.25rem;
+            border-radius: 8px;
+            background: #fff;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+        }
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 3px solid #d0d0d0;
+            border-top-color: #337ab7;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            flex: 0 0 auto;
+        }
+        .overlay-text {
+            font-size: 0.98rem;
+            color: #222;
+        }
+        .toast {
+            position: fixed;
+            bottom: 14px;
+            right: 14px;
+            min-width: 220px;
+            max-width: 380px;
+            padding: 0.65rem 0.85rem;
+            border-radius: 6px;
+            color: #222;
+            background: #fff;
+            border: 1px solid #9a9a9a;
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.14);
+            opacity: 0;
+            transform: translateY(8px);
+            pointer-events: none;
+            transition: opacity 0.2s ease, transform 0.2s ease;
+            z-index: 10000;
+            font-size: 0.94rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .toast.error {
+            border-color: #e7b1af;
+        }
+        .toast.success {
+            border-color: #b8dcbc;
+        }
+        .toast-icon {
+            display: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #27ae60;
+            color: #fff;
+            font-size: 0.75rem;
+            line-height: 18px;
+            text-align: center;
+            flex: 0 0 18px;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
@@ -114,12 +193,62 @@
                 <!-- JS will populate rows -->
             </tbody>
         </table>
-        <div id="form-error" class="error"></div>
     </form>
+    <div id="status-toast" class="toast" role="status" aria-live="polite">
+        <span id="status-toast-icon" class="toast-icon">✓</span>
+        <span id="status-toast-text"></span>
+    </div>
+    <div id="loading-overlay" class="overlay" aria-live="polite" aria-busy="true">
+        <div class="overlay-card" role="status">
+            <div class="spinner"></div>
+            <div id="overlay-text" class="overlay-text">Working...</div>
+        </div>
+    </div>
     <script>
     const SENSOR_TYPES = ["Raw", "NTC", "Pressure"];
     const NTC_TABLES = ["Bosch 0280130026", "Bosch TMAP 0281002437", "Universal 1/8 NPT"];
     let config = null;
+    const loadingOverlay = document.getElementById('loading-overlay');
+    const overlayText = document.getElementById('overlay-text');
+    const statusToast = document.getElementById('status-toast');
+    const statusToastIcon = document.getElementById('status-toast-icon');
+    const statusToastText = document.getElementById('status-toast-text');
+    let toastTimer = null;
+
+    function showOverlay(message) {
+        if (overlayText) {
+            if (message) {
+                overlayText.style.display = '';
+                overlayText.textContent = message;
+            } else {
+                overlayText.style.display = 'none';
+                overlayText.textContent = '';
+            }
+        }
+        if (loadingOverlay) loadingOverlay.style.display = 'flex';
+    }
+
+    function hideOverlay() {
+        if (loadingOverlay) loadingOverlay.style.display = 'none';
+    }
+
+    function setStatus(message, isError, withSuccessIcon) {
+        if (!statusToast || !statusToastText || !message) return;
+        statusToastText.textContent = message;
+        if (statusToastIcon) {
+            statusToastIcon.style.display = withSuccessIcon ? 'inline-block' : 'none';
+        }
+        statusToast.classList.remove('error', 'success', 'show');
+        statusToast.classList.add(isError ? 'error' : 'success');
+        void statusToast.offsetWidth;
+        statusToast.classList.add('show');
+        if (toastTimer) {
+            clearTimeout(toastTimer);
+        }
+        toastTimer = setTimeout(() => {
+            statusToast.classList.remove('show');
+        }, isError ? 4500 : 2500);
+    }
 
     function createRow(idx, ch) {
         const isNTC = ch.type == 1;
@@ -223,7 +352,7 @@
         e.preventDefault();
         const form = e.target;
         const error = validateConfig(form);
-        document.getElementById('form-error').textContent = error;
+        setStatus(error, true);
         if (error) return;
         // Build config object
         config.can_speed_kbps = parseInt(document.getElementById('can-speed').value);
@@ -257,45 +386,68 @@
         // Read pull-up Vref
         const pv = parseInt(document.getElementById('pullup-vref').value);
         config.pullup_vref_mv = isNaN(pv) ? (config.pullup_vref_mv || 5025) : pv;
-        const resp = await fetch('/api/config', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(config)
-        });
-        if (resp.ok) {
-            alert('Config saved! Please reboot to apply.');
-        } else {
-            alert('Failed to save config.');
+        try {
+            const resp = await fetch('/api/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(config)
+            });
+            if (resp.ok) {
+                setStatus('Config saved.', false, true);
+            } else {
+                setStatus('Failed to save config.', true);
+            }
+        } catch (e) {
+            setStatus('Failed to save config.', true);
         }
     };
 
     document.getElementById('reboot-btn').onclick = async function() {
-        await fetch('/api/reboot', { method: 'POST' });
-        alert('Device rebooting...');
+        let secondsLeft = 10;
+        showOverlay(`Rebooting device... Refreshing in ${secondsLeft} seconds`);
+        try {
+            await fetch('/api/reboot', { method: 'POST' });
+        } catch (e) {
+            // Ignore errors because reboot can drop HTTP connection abruptly
+        }
+        const countdown = setInterval(() => {
+            secondsLeft -= 1;
+            if (secondsLeft > 0) {
+                showOverlay(`Rebooting device... Refreshing in ${secondsLeft} seconds`);
+                return;
+            }
+            clearInterval(countdown);
+            showOverlay('Rebooting device... Refreshing now');
+            window.location.reload();
+        }, 1000);
     };
 
     // Backup (download JSON) — filename uses client time ddmmyy-hhmmss
     document.getElementById('backup-btn').onclick = async function() {
-        const resp = await fetch('/api/config/export.json');
-        if (!resp.ok) { alert('Failed to download config'); return; }
-        const blob = await resp.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        const now = new Date();
-        const pad = (n) => n.toString().padStart(2, '0');
-        const dd = pad(now.getDate());
-        const mm = pad(now.getMonth() + 1);
-        const yy = pad(now.getFullYear() % 100);
-        const hh = pad(now.getHours());
-        const mi = pad(now.getMinutes());
-        const ss = pad(now.getSeconds());
-        const datetime = `${dd}${mm}${yy}-${hh}${mi}${ss}`; // ddmmyy-hhmmss
-        a.download = `esp32-canboard-config-${datetime}.json`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(url);
+        try {
+            const resp = await fetch('/api/config/export.json');
+            if (!resp.ok) { setStatus('Failed to download config.', true); return; }
+            const blob = await resp.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            const now = new Date();
+            const pad = (n) => n.toString().padStart(2, '0');
+            const dd = pad(now.getDate());
+            const mm = pad(now.getMonth() + 1);
+            const yy = pad(now.getFullYear() % 100);
+            const hh = pad(now.getHours());
+            const mi = pad(now.getMinutes());
+            const ss = pad(now.getSeconds());
+            const datetime = `${dd}${mm}${yy}-${hh}${mi}${ss}`; // ddmmyy-hhmmss
+            a.download = `esp32-canboard-config-${datetime}.json`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+        } catch (e) {
+            // No toast needed for backup flow
+        }
     };
 
     // Restore (upload JSON)
@@ -307,12 +459,20 @@
         const f = e.target.files[0];
         if (!f) return;
         if (!confirm('Restore configuration from selected file? Existing config will be overwritten.')) return;
-        const text = await f.text();
-        const resp = await fetch('/api/config/import.json', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: text });
-        if (resp.ok) {
-            alert('Config restored. Please reboot to apply.');
-        } else {
-            alert('Failed to restore config.');
+        try {
+            const text = await f.text();
+            const resp = await fetch('/api/config/import.json', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: text });
+            if (resp.ok) {
+                setTimeout(() => {
+                    window.location.reload();
+                }, 900);
+            } else {
+                // No toast needed for restore flow
+            }
+        } catch (e) {
+            // No toast needed for restore flow
+        } finally {
+            e.target.value = '';
         }
     };
 

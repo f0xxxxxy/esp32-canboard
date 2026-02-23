@@ -8,6 +8,7 @@
 #include "inc/inputs.h"
 #include "inc/wifi_config.h"
 #include "esp_wifi.h"
+#include "driver/twai.h"
 #include "cJSON.h"
 #include <sys/param.h>
 #include <string.h>
@@ -22,6 +23,47 @@ static const char *TAG = "HTTPD";
  * @brief HTTP server handle
  */
 static httpd_handle_t server = NULL;
+extern board_config_t board_cfg;
+extern twai_handle_t twai_can;
+extern esp_err_t can_init(void);
+
+static bool apply_runtime_config(const board_config_t *cfg) {
+    if (cfg == NULL) {
+        return false;
+    }
+
+    board_config_t previous_cfg = board_cfg;
+    bool can_speed_changed = (previous_cfg.can_speed_kbps != cfg->can_speed_kbps);
+    board_cfg = *cfg;
+
+    if (!can_speed_changed) {
+        return true;
+    }
+
+    esp_err_t err = twai_stop_v2(twai_can);
+    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
+        ESP_LOGW(TAG, "Failed to stop TWAI before reinit: %s", esp_err_to_name(err));
+    }
+
+    err = twai_driver_uninstall_v2(twai_can);
+    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
+        ESP_LOGE(TAG, "Failed to uninstall TWAI driver: %s", esp_err_to_name(err));
+        board_cfg = previous_cfg;
+        return false;
+    }
+
+    if (can_init() != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to reinitialize CAN after config update, restoring previous config");
+        board_cfg = previous_cfg;
+        if (can_init() != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to restore previous CAN configuration");
+        }
+        return false;
+    }
+
+    ESP_LOGI(TAG, "Runtime CAN speed updated to %lu kbps", (unsigned long)board_cfg.can_speed_kbps);
+    return true;
+}
 
 // Delayed restart task: stops HTTP server and WiFi, then restarts the chip.
 static void delayed_restart_task(void *arg) {
@@ -302,6 +344,10 @@ esp_err_t config_post_handler(httpd_req_t *req) {
         ESP_LOGE(TAG, "Failed to save configuration");
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to save config");
         return ESP_FAIL;
+    }
+
+    if (!apply_runtime_config(&cfg)) {
+        ESP_LOGW(TAG, "Config saved but failed to fully apply at runtime");
     }
     
     ESP_LOGI(TAG, "Configuration updated successfully");
@@ -603,6 +649,10 @@ esp_err_t config_import_post_handler(httpd_req_t *req) {
         free(buf);
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to save imported config");
         return ESP_FAIL;
+    }
+
+    if (!apply_runtime_config(&cfg)) {
+        ESP_LOGW(TAG, "Imported config saved but failed to fully apply at runtime");
     }
 
     cJSON_Delete(root);
