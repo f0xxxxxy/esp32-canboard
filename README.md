@@ -33,7 +33,7 @@ The web UI allows you to:
 
 | Function | Description |
 |:----|:----|
-| Save Config | Save current UI settings to device storage (`/spiffs/config.bin`). Changes are validated and persisted and applied immediately. |
+| Save Config | Save current UI settings to device storage (`/spiffs/config.bin`). Changes are validated, persisted and applied immediately. |
 | Backup | Download a JSON snapshot of the current configuration. The filename is prefixed with `esp32-canboard-config-` and suffixed with the client timestamp in `ddmmyy-hhmmss` format. |
 | Restore | Select a previously exported JSON file. The UI will upload the JSON to the device and validate the payload. The existing configuration is backed up on the device before overwrite; if saving the imported file fails, the device will restore the previous configuration. |
 | Reboot Device | Reboots the device. |
