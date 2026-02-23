@@ -420,6 +420,98 @@ esp_err_t ntc_tables_get_handler(httpd_req_t *req) {
 }
 
 /**
+ * @brief HTTP GET handler for live channel values (GET /api/live_values)
+ * Returns current measured voltage and computed value (pressure/temperature) per channel.
+ */
+esp_err_t live_values_get_handler(httpd_req_t *req) {
+    notify_client_connected();
+
+    uint16_t voltages_copy[NUM_ADC_CHANNELS] = {0};
+    if (xSemaphoreTake(filtered_voltages_mutex, pdMS_TO_TICKS(20)) == pdTRUE) {
+        memcpy(voltages_copy, (const void *)filtered_voltages, sizeof(voltages_copy));
+        xSemaphoreGive(filtered_voltages_mutex);
+    }
+
+    char *json = malloc(2048);
+    if (!json) {
+        ESP_LOGE(TAG, "Failed to allocate live values JSON buffer");
+        httpd_resp_send_500(req);
+        return ESP_FAIL;
+    }
+
+    size_t json_pos = 0;
+    const size_t json_max = 2048;
+    json_pos += snprintf(json + json_pos, json_max - json_pos, "{\"channels\":[");
+
+    for (int i = 0; i < CONFIG_CHANNELS; ++i) {
+        float voltage_v = (float)voltages_copy[i] / 1000.0f;
+
+        if (board_cfg.channels[i].type == SENSOR_PRESSURE) {
+            uint16_t pressure_x100 = getSensorPressure(
+                voltages_copy[i],
+                board_cfg.channels[i].params.pressure.min_mv,
+                board_cfg.channels[i].params.pressure.max_mv,
+                board_cfg.channels[i].params.pressure.min_kpa,
+                board_cfg.channels[i].params.pressure.max_kpa);
+            float pressure_kpa = (float)pressure_x100 / 100.0f;
+            json_pos += snprintf(json + json_pos, json_max - json_pos,
+                "%s{\"voltage_v\":%.2f,\"value\":\"%.2f kPa\"}",
+                i ? "," : "", voltage_v, pressure_kpa);
+        } else if (board_cfg.channels[i].type == SENSOR_NTC) {
+            const ntc_table_def_t *table = ntc_get_table(board_cfg.channels[i].params.ntc.table_id);
+            int8_t temp_c = getSensorTemperature(
+                voltages_copy[i],
+                board_cfg.channels[i].pullup_ohms,
+                board_cfg.pullup_vref_mv,
+                table ? table->points : NULL,
+                table ? table->points_count : 0);
+
+            int32_t r_ntc = -1;
+            if (voltages_copy[i] > 0 && voltages_copy[i] < board_cfg.pullup_vref_mv &&
+                board_cfg.channels[i].pullup_ohms > 0 && board_cfg.pullup_vref_mv > 0) {
+                float v_ntc = (float)voltages_copy[i] / 1000.0f;
+                float v_ref = (float)board_cfg.pullup_vref_mv / 1000.0f;
+                float r_ntc_f = ((float)board_cfg.channels[i].pullup_ohms * v_ntc) / (v_ref - v_ntc);
+                r_ntc = (int32_t)(r_ntc_f + 0.5f);
+            }
+
+            if (temp_c == (int8_t)-128) {
+                json_pos += snprintf(json + json_pos, json_max - json_pos,
+                    "%s{\"voltage_v\":%.2f,\"value\":\"\"}",
+                    i ? "," : "", voltage_v);
+            } else {
+                if (r_ntc >= 0) {
+                    json_pos += snprintf(json + json_pos, json_max - json_pos,
+                        "%s{\"voltage_v\":%.2f,\"value\":\"%d \xC2\xB0C (%ld \xCE\xA9)\"}",
+                        i ? "," : "", voltage_v, (int)temp_c, (long)r_ntc);
+                } else {
+                    json_pos += snprintf(json + json_pos, json_max - json_pos,
+                        "%s{\"voltage_v\":%.2f,\"value\":\"%d \xC2\xB0C\"}",
+                        i ? "," : "", voltage_v, (int)temp_c);
+                }
+            }
+        } else {
+            json_pos += snprintf(json + json_pos, json_max - json_pos,
+                "%s{\"voltage_v\":%.2f,\"value\":\"\"}",
+                i ? "," : "", voltage_v);
+        }
+
+        if (json_pos >= json_max - 96) {
+            ESP_LOGE(TAG, "JSON buffer overflow in live values");
+            free(json);
+            httpd_resp_send_500(req);
+            return ESP_FAIL;
+        }
+    }
+
+    snprintf(json + json_pos, json_max - json_pos, "]}\n");
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, json, strlen(json));
+    free(json);
+    return ESP_OK;
+}
+
+/**
  * @brief HTTP GET handler to export configuration as downloadable JSON file
  * (GET /api/config/export.json)
  */
@@ -750,6 +842,14 @@ void start_http_server(void) {
         .user_ctx = NULL 
     };
     httpd_register_uri_handler(server, &ntc_tables_uri);
+
+    httpd_uri_t live_values_uri = {
+        .uri = "/api/live_values",
+        .method = HTTP_GET,
+        .handler = live_values_get_handler,
+        .user_ctx = NULL
+    };
+    httpd_register_uri_handler(server, &live_values_uri);
     
     ESP_LOGI(TAG, "HTTP server started on http://192.168.4.1");
 }

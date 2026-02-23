@@ -13,8 +13,9 @@
         /* Center the Input (1st) and Pullup header (4th) */
         th:nth-child(1), td:nth-child(1) { text-align: center; }
         th:nth-child(4) { text-align: center; }
-        /* Center voltage/pressure headers (7-10) */
-        th:nth-child(7), th:nth-child(8), th:nth-child(9), th:nth-child(10) { text-align: center; }
+        /* Center voltage/pressure headers (7-12) */
+        th:nth-child(7), th:nth-child(8), th:nth-child(9), th:nth-child(10), th:nth-child(11), th:nth-child(12) { text-align: center; }
+        td:nth-child(11) { text-align: center; }
         /* Allow Pullup input to fill its cell but align value to the right */
         td:nth-child(4) input { text-align: right; width: 100%; box-sizing: border-box; }
         /* Center the Filtering column (6th) and its checkboxes */
@@ -174,6 +175,8 @@
             <col style="width:8%">    <!-- Pressure Max mV -->
             <col style="width:8%">    <!-- Pressure Min kPa -->
             <col style="width:8%">    <!-- Pressure Max kPa -->
+            <col style="width:7%">    <!-- Voltage -->
+            <col style="width:8%">    <!-- Value -->
         </colgroup>
             <thead>
                 <tr>
@@ -187,6 +190,8 @@
                     <th>Voltage Max</th>
                     <th>Pressure Min</th>
                     <th>Pressure Max</th>
+                    <th>Voltage</th>
+                    <th>Value</th>
                 </tr>
             </thead>
             <tbody id="channels-tbody">
@@ -268,6 +273,8 @@
             <td><div class="unit-wrap"><input name="pmaxmv${idx}" class="no-spin" type="number" min="0" max="5000" value="${(ch.params && ch.params.pressure && typeof ch.params.pressure.max_mv !== 'undefined') ? ch.params.pressure.max_mv : ''}" ${isPressure ? '' : 'disabled'}><span class="unit">mV</span></div></td>
             <td><div class="unit-wrap"><input name="pminkpa${idx}" class="no-spin" type="number" step="0.01" value="${(ch.params && ch.params.pressure && typeof ch.params.pressure.min_kpa !== 'undefined') ? ch.params.pressure.min_kpa : ''}" ${isPressure ? '' : 'disabled'}><span class="unit">kPa</span></div></td>
             <td><div class="unit-wrap"><input name="pmaxkpa${idx}" class="no-spin" type="number" step="0.01" value="${(ch.params && ch.params.pressure && typeof ch.params.pressure.max_kpa !== 'undefined') ? ch.params.pressure.max_kpa : ''}" ${isPressure ? '' : 'disabled'}><span class="unit">kPa</span></div></td>
+            <td><span id="live-voltage-${idx}">--</span></td>
+            <td><span id="live-value-${idx}"></span></td>
         </tr>`;
     }
 
@@ -346,6 +353,37 @@
         // Set pull-up Vref if provided
         const pullupElem = document.getElementById('pullup-vref');
         if (pullupElem) pullupElem.value = (config.pullup_vref_mv !== undefined) ? config.pullup_vref_mv : 5025;
+        await refreshLiveValues();
+    }
+
+    async function refreshLiveValues() {
+        try {
+            const res = await fetch('/api/live_values', { cache: 'no-store' });
+            if (!res.ok) return;
+            const live = await res.json();
+            if (!live || !Array.isArray(live.channels)) return;
+
+            for (let i = 0; i < 10; ++i) {
+                const ch = live.channels[i];
+                if (!ch) continue;
+                const voltageEl = document.getElementById(`live-voltage-${i}`);
+                const valueEl = document.getElementById(`live-value-${i}`);
+
+                if (voltageEl) {
+                    if (typeof ch.voltage_v === 'number') {
+                        voltageEl.textContent = `${Math.round(ch.voltage_v * 1000)} mV`;
+                    } else {
+                        voltageEl.textContent = '--';
+                    }
+                }
+
+                if (valueEl) {
+                    valueEl.textContent = ch.value || '';
+                }
+            }
+        } catch (e) {
+            // Live update failures are non-fatal; keep current display values.
+        }
     }
 
     document.getElementById('config-form').onsubmit = async function(e) {
@@ -477,6 +515,7 @@
     };
 
     loadConfig();
+    setInterval(refreshLiveValues, 1000);
     </script>
 </body>
 </html>
