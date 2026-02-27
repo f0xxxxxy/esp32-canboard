@@ -9,7 +9,7 @@
 * Optional pull-up resistors via fused 5v rail for each input (TH 6.3mm)
 * Optional 120ohm CAN terminating resistor
 * Configuration via web interface over WiFi
-* Optional per-channel median filtering to reduce noise
+* Optional per-channel median filtering with selectable strength (none/low/med/high) to reduce noise
 * Small PCB Footprint - 40mm x 60mm
 
 ## Device Configuration
@@ -22,7 +22,7 @@ On each boot the board enables a WiFi access point and web configuration interfa
 
 The web UI allows you to:
 
-- View and edit per-channel settings (name, sensor type, pull-up, filtering, pressure calibration).
+- View and edit per-channel settings (name, sensor type, pull-up, **filter level** dropdown, pressure calibration).
 - Configure required CAN parameters - Base ID and bus speed.
 - Adjust pullup vref calculation voltage to allow for LDO regulator output/load.
 - View current input voltages and calculated values in real time.

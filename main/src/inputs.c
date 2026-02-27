@@ -254,10 +254,11 @@ uint16_t getScaledMillivolts(adc_channel_t channel, bool scaled, float scaling_f
  * @return Median value from the sorted samples
  *         0 if samples pointer is NULL or count <= 0
  *
- * @note Input array is modified (sorted) during execution.
- *       For odd count: returns middle element
- *       For even count: returns lower-middle element (count/2)
- *       Bubble sort O(n²) is acceptable for FILTER_DEPTH (typically 5 samples)
+ * @note Input array is modified (sorted) during execution.  The caller may
+ *       supply any sample depth (e.g. 3,5,7) as determined by the configured
+ *       filter level.  For odd count: returns middle element.  For even
+ *       count: returns lower-middle element (count/2).  Bubble sort O(n²) is
+ *       acceptable for the small depths used by this application.
  */
 uint16_t medianFilterHelper(uint16_t *samples, int count) {
     if (samples == NULL || count <= 0) {
@@ -298,7 +299,8 @@ uint16_t medianFilterHelper(uint16_t *samples, int count) {
  */
 void adcProcess(void *arg) {
     ESP_LOGI(adc_log, "ADC Processing Task Started");
-    uint16_t samples[FILTER_DEPTH];
+    // allocate buffer using maximum possible depth
+    uint16_t samples[FILTER_DEPTH_MAX];
     
     while (1) {
         for (int ch = ADC_CHANNEL_START; ch <= ADC_CHANNEL_END; ch++) {
@@ -310,31 +312,46 @@ void adcProcess(void *arg) {
                 scaling = ((float)board_cfg.channels[ch].pullup_ohms + DIVIDER_TOTAL_OHM) / DIVIDER_TOTAL_OHM;
             }
             
-            if (board_cfg.channels[ch].filtering) {
-                // Apply median filtering
-                bool sample_valid = true;
-                for (int i = 0; i < FILTER_DEPTH; i++) {
-                    uint16_t sample = getScaledMillivolts(ch, true, scaling);
-                    if (sample == 0) {
-                        sample_valid = false;
+            // determine filtering depth based on configured level
+            switch (board_cfg.channels[ch].filtering) {
+                case FILTER_LOW:
+                case FILTER_MED:
+                case FILTER_HIGH: {
+                    int depth = FILTER_DEPTH_MED;
+                    if (board_cfg.channels[ch].filtering == FILTER_LOW) {
+                        depth = FILTER_DEPTH_LOW;
+                    } else if (board_cfg.channels[ch].filtering == FILTER_HIGH) {
+                        depth = FILTER_DEPTH_HIGH;
                     }
-                    samples[i] = sample;
-                    vTaskDelay(pdMS_TO_TICKS(2));
+
+                    // Apply median filtering with `depth` samples
+                    bool sample_valid = true;
+                    for (int i = 0; i < depth; i++) {
+                        uint16_t sample = getScaledMillivolts(ch, true, scaling);
+                        if (sample == 0) {
+                            sample_valid = false;
+                        }
+                        samples[i] = sample;
+                        vTaskDelay(pdMS_TO_TICKS(2));
+                    }
+
+                    if (sample_valid) {
+                        uint16_t filtered = medianFilterHelper(samples, depth);
+                        if (xSemaphoreTake(filtered_voltages_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+                            filtered_voltages[ch] = filtered;
+                            xSemaphoreGive(filtered_voltages_mutex);
+                        }
+                    }
+                    break;
                 }
-                
-                if (sample_valid) {
-                    uint16_t filtered = medianFilterHelper(samples, FILTER_DEPTH);
+                default: {
+                    // FILTER_NONE or invalid value: no filtering
+                    uint16_t raw = getScaledMillivolts(ch, true, scaling);
                     if (xSemaphoreTake(filtered_voltages_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
-                        filtered_voltages[ch] = filtered;
+                        filtered_voltages[ch] = raw;
                         xSemaphoreGive(filtered_voltages_mutex);
                     }
-                }
-            } else {
-                // No filtering, just read raw value
-                uint16_t raw = getScaledMillivolts(ch, true, scaling);
-                if (xSemaphoreTake(filtered_voltages_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
-                    filtered_voltages[ch] = raw;
-                    xSemaphoreGive(filtered_voltages_mutex);
+                    break;
                 }
             }
         }

@@ -268,7 +268,12 @@
             <td><select name="ntc${idx}" ${isNTC ? '' : 'disabled'}>
                 ${NTC_TABLES.map((t,i)=>`<option value="${i}"${ch.params?.ntc?.table_id==i?' selected':''}>${t}</option>`).join('')}
             </select></td>
-            <td><input name="filtering${idx}" type="checkbox" ${ch.filtering ? 'checked' : ''} ${isPressure ? '' : 'disabled'}></td>
+            <td><select name="filtering${idx}" ${isPressure ? '' : 'disabled'}>
+                    <option value="0"${ch.filtering==0?' selected':''}>None</option>
+                    <option value="1"${ch.filtering==1?' selected':''}>Low</option>
+                    <option value="2"${ch.filtering==2?' selected':''}>Medium</option>
+                    <option value="3"${ch.filtering==3?' selected':''}>High</option>
+                </select></td>
             <td><div class="unit-wrap"><input name="pminmv${idx}" class="no-spin" type="number" min="0" max="5000" value="${(ch.params && ch.params.pressure && typeof ch.params.pressure.min_mv !== 'undefined') ? ch.params.pressure.min_mv : ''}" ${isPressure ? '' : 'disabled'}><span class="unit">mV</span></div></td>
             <td><div class="unit-wrap"><input name="pmaxmv${idx}" class="no-spin" type="number" min="0" max="5000" value="${(ch.params && ch.params.pressure && typeof ch.params.pressure.max_mv !== 'undefined') ? ch.params.pressure.max_mv : ''}" ${isPressure ? '' : 'disabled'}><span class="unit">mV</span></div></td>
             <td><div class="unit-wrap"><input name="pminkpa${idx}" class="no-spin" type="number" step="0.01" value="${(ch.params && ch.params.pressure && typeof ch.params.pressure.min_kpa !== 'undefined') ? ch.params.pressure.min_kpa : ''}" ${isPressure ? '' : 'disabled'}><span class="unit">kPa</span></div></td>
@@ -297,6 +302,8 @@
                 if (isNaN(minmv) || isNaN(maxmv) || minmv >= maxmv) error += `Channel ${i+1}: Pressure mV min/max invalid. `;
                 if (minmv < 0 || minmv > 5000 || maxmv < 0 || maxmv > 5000) error += `Channel ${i+1}: Pressure mV must be 0-5000. `;
                 if (isNaN(minkpa) || isNaN(maxkpa) || minkpa >= maxkpa) error += `Channel ${i+1}: Pressure kPa min/max invalid. `;
+                const lvl = parseInt(form[`filtering${i}`].value);
+                if (isNaN(lvl) || lvl < 0 || lvl > 3) error += `Channel ${i+1}: Filter level invalid. `;
             }
         }
         return error;
@@ -408,7 +415,7 @@
             config.channels[i].name = form[`name${i}`].value.trim();
             config.channels[i].pullup_ohms = parseInt(form[`pullup${i}`].value);
             config.channels[i].type = parseInt(form[`type${i}`].value);
-            config.channels[i].filtering = form[`filtering${i}`].checked ? 1 : 0;
+            config.channels[i].filtering = parseInt(form[`filtering${i}`].value);
             config.channels[i].params = {};
             if (config.channels[i].type === 1) {
                 config.channels[i].params.ntc = { table_id: parseInt(form[`ntc${i}`].value) };

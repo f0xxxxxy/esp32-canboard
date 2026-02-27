@@ -10,7 +10,15 @@
 #define ADC_CHANNEL_START ADC_CHANNEL_0            ///< First ADC channel
 #define ADC_CHANNEL_END ADC_CHANNEL_9              ///< Last ADC channel
 #define NUM_ADC_CHANNELS (ADC_CHANNEL_END - ADC_CHANNEL_START + 1) ///< Total number of ADC channels (10)
-#define FILTER_DEPTH 5                             ///< Number of samples for median filtering
+// Median filter sample depths for selectable levels
+#define FILTER_DEPTH_LOW 5                         ///< Samples for "low" filter level
+#define FILTER_DEPTH_MED 10                         ///< Samples for "medium" filter level (default)
+#define FILTER_DEPTH_HIGH 15                        ///< Samples for "high" filter level
+#define FILTER_DEPTH_MAX FILTER_DEPTH_HIGH        ///< Maximum buffer size required for filtering
+
+// legacy macro kept for existing code, evaluates to medium depth
+#define FILTER_DEPTH FILTER_DEPTH_MED             ///< Alias for backward compatibility
+
 #define NTC_TABLE_SIZE(x) (sizeof(x) / sizeof((x)[0])) ///< Macro to calculate NTC table size
 #define DIVIDER_HIGH_OHM 4700                      ///< Series resistor value (4.7k ohm)
 #define DIVIDER_LOW_OHM 10000                      ///< Pull-to-ground resistor value (10k ohm)

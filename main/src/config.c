@@ -134,6 +134,26 @@ bool config_load(board_config_t *cfg) {
     }
     
     ESP_LOGI(TAG, "Config loaded and verified, CRC=0x%08X", cfg->crc32);
+
+    // migrate older versions if necessary
+    if (cfg->version < CONFIG_VERSION) {
+        ESP_LOGW(TAG, "Migrating config from version %u to %u", cfg->version, CONFIG_VERSION);
+        if (cfg->version < 3) {
+            // previous versions stored filtering as boolean
+            for (int i = 0; i < CONFIG_CHANNELS; ++i) {
+                if (cfg->channels[i].filtering) {
+                    cfg->channels[i].filtering = FILTER_MED;
+                } else {
+                    cfg->channels[i].filtering = FILTER_NONE;
+                }
+            }
+        }
+        cfg->version = CONFIG_VERSION;
+        // update CRC and persist new layout immediately
+        cfg->crc32 = crc32(cfg, offsetof(board_config_t, crc32));
+        config_save(cfg);
+    }
+
     return true;
 }
 
@@ -176,7 +196,7 @@ void config_set_defaults(board_config_t *cfg) {
         snprintf(cfg->channels[i].name, CONFIG_NAME_LEN, "Input %d", i + 1);
         cfg->channels[i].pullup_ohms = 0;
         cfg->channels[i].type = SENSOR_RAW;
-        cfg->channels[i].filtering = 0; // No filtering by default
+        cfg->channels[i].filtering = FILTER_NONE; // No filtering by default
     }
     
     ESP_LOGI(TAG, "Default config set");

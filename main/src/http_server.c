@@ -263,7 +263,14 @@ esp_err_t config_post_handler(httpd_req_t *req) {
         cfg.channels[i].name[CONFIG_NAME_LEN - 1] = 0;
         cfg.channels[i].pullup_ohms = (uint32_t)pullup->valueint;
         cfg.channels[i].type = (sensor_type_t)type->valueint;
-        cfg.channels[i].filtering = filtering && cJSON_IsNumber(filtering) ? filtering->valueint : 0;
+        if (filtering && cJSON_IsNumber(filtering)) {
+            int lvl = filtering->valueint;
+            if (lvl < FILTER_NONE) lvl = FILTER_NONE;
+            if (lvl > FILTER_HIGH) lvl = FILTER_HIGH;
+            cfg.channels[i].filtering = (uint8_t)lvl;
+        } else {
+            cfg.channels[i].filtering = FILTER_NONE;
+        }
         
         cJSON *params = cJSON_GetObjectItem(ch, "params");
         if (!params) {
@@ -643,7 +650,14 @@ esp_err_t config_import_post_handler(httpd_req_t *req) {
         cfg.channels[i].name[CONFIG_NAME_LEN - 1] = 0;
         cfg.channels[i].pullup_ohms = (uint32_t)pullup->valueint;
         cfg.channels[i].type = (sensor_type_t)type->valueint;
-        cfg.channels[i].filtering = filtering && cJSON_IsNumber(filtering) ? filtering->valueint : 0;
+        if (filtering && cJSON_IsNumber(filtering)) {
+            int lvl = filtering->valueint;
+            if (lvl < FILTER_NONE) lvl = FILTER_NONE;
+            if (lvl > FILTER_HIGH) lvl = FILTER_HIGH;
+            cfg.channels[i].filtering = (uint8_t)lvl;
+        } else {
+            cfg.channels[i].filtering = FILTER_NONE;
+        }
 
         cJSON *params = cJSON_GetObjectItem(ch, "params");
         if (!params) {
