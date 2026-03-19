@@ -5,21 +5,26 @@
 #include "esp_adc/adc_cali.h"
 #include "esp_adc/adc_cali_scheme.h"
 #include "driver/temperature_sensor.h"
-
 #define ADC_UNIT ADC_UNIT_1                        ///< ADC unit to use (ADC unit 1)
 #define ADC_CHANNEL_START ADC_CHANNEL_0            ///< First ADC channel
 #define ADC_CHANNEL_END ADC_CHANNEL_9              ///< Last ADC channel
 #define NUM_ADC_CHANNELS (ADC_CHANNEL_END - ADC_CHANNEL_START + 1) ///< Total number of ADC channels (10)
-// Median filter sample depths for selectable levels
+
+/* New hardware: two ADS7830 providing 16 analog inputs (logical indices 0..15) */
+#define NUM_ANALOG_INPUTS 16
+
+/* ADC channels used internally on ESP32 for monitoring rails */
+#define V5_REF_ADC_CHANNEL ADC_CHANNEL_9
+#define USB_ADC_CHANNEL ADC_CHANNEL_2
+#define EXT_VOLT_ADC_CHANNEL ADC_CHANNEL_3
+
+/* Median filter sample depths for selectable levels */
 #define FILTER_DEPTH_LOW 5                         ///< Samples for "low" filter level
-#define FILTER_DEPTH_MED 10                         ///< Samples for "medium" filter level (default)
-#define FILTER_DEPTH_HIGH 15                        ///< Samples for "high" filter level
+#define FILTER_DEPTH_MED 10                        ///< Samples for "medium" filter level (default)
+#define FILTER_DEPTH_HIGH 15                       ///< Samples for "high" filter level
 #define FILTER_DEPTH_MAX FILTER_DEPTH_HIGH        ///< Maximum buffer size required for filtering
 
-// legacy macro kept for existing code, evaluates to medium depth
-#define FILTER_DEPTH FILTER_DEPTH_MED             ///< Alias for backward compatibility
-
-#define NTC_TABLE_SIZE(x) (sizeof(x) / sizeof((x)[0])) ///< Macro to calculate NTC table size
+/* Divider constants used by scaling helpers */
 #define DIVIDER_HIGH_OHM 4700                      ///< Series resistor value (4.7k ohm)
 #define DIVIDER_LOW_OHM 10000                      ///< Pull-to-ground resistor value (10k ohm)
 #define DIVIDER_TOTAL_OHM (DIVIDER_HIGH_OHM + DIVIDER_LOW_OHM) ///< Total divider impedance (14.7k ohm)
@@ -55,7 +60,17 @@ void initAdcChannels(void);
 /// Mutex protecting access to filtered_voltages array
 extern SemaphoreHandle_t filtered_voltages_mutex;
 /// Shared voltage buffer updated by Core 1, read by CAN TX task
-extern volatile uint16_t filtered_voltages[NUM_ADC_CHANNELS];
+extern volatile uint16_t filtered_voltages[NUM_ANALOG_INPUTS];
+
+extern SemaphoreHandle_t scaled_pressures_mutex;
+extern volatile uint16_t scaled_pressures[4];
+
+// Read raw/converted value for logical analog channel index (0..NUM_ANALOG_INPUTS-1)
+// Returns true on success and fills out_mv with millivolts (0 when v5 ref absent)
+bool read_analog_raw(int index, uint16_t *out_mv);
+uint16_t get_v5_rail_mv(void);
+uint16_t get_usb_voltage_mv(void);
+uint16_t get_external_voltage_mv(void);
 
 /// @brief Convert NTC voltage reading to temperature using lookup table with linear interpolation
 /// @param v_mv Measured voltage in millivolts

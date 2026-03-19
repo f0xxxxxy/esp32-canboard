@@ -3,8 +3,11 @@
 #include "driver/gpio.h"
 #include "driver/twai.h"
 
-#define CAN_TX_GPIO_NUM       GPIO_NUM_12 ///< CAN bus TX pin (GPIO 12)
-#define CAN_RX_GPIO_NUM       GPIO_NUM_11 ///< CAN bus RX pin (GPIO 11)
+#define DRIVECAN_TX_GPIO_NUM       GPIO_NUM_11
+#define DRIVECAN_RX_GPIO_NUM       GPIO_NUM_10
+
+/* Default CAN base ID (can be overridden via board config) */
+#define CAN_BASEID 0x620
 
 /// TWAI driver handle for CAN bus communication
 extern twai_handle_t twai_can;

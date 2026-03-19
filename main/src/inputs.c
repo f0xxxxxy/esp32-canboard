@@ -12,6 +12,7 @@
 #include "driver/temperature_sensor.h"
 #include "inc/inputs.h"
 #include "inc/config.h"
+#include "ads7830.h"
 
 #include <math.h>
 #include <stdint.h>
@@ -25,7 +26,42 @@ static temperature_sensor_handle_t tempSensor_handle = NULL;
 static bool tempSensor_initialized = false;
 
 SemaphoreHandle_t filtered_voltages_mutex;
-volatile uint16_t filtered_voltages[NUM_ADC_CHANNELS];
+volatile uint16_t filtered_voltages[NUM_ANALOG_INPUTS];
+SemaphoreHandle_t scaled_pressures_mutex;
+volatile uint16_t scaled_pressures[4];
+
+/* Read raw/converted value for logical analog channel index (0..NUM_ANALOG_INPUTS-1)
+   Returns true on success and fills out_mv with millivolts (0 when v5 absent) */
+bool read_analog_raw(int index, uint16_t *out_mv)
+{
+    if (out_mv == NULL) return false;
+    if (index < 0 || index >= NUM_ANALOG_INPUTS) {
+        *out_mv = 0;
+        return false;
+    }
+
+    int device_idx = index / 8; // two ADS7830 devices, 8 channels each
+    int ch = index % 8;
+    uint8_t raw = 0;
+    if (!ads7830_read_channel(device_idx, ch, &raw)) {
+        *out_mv = 0;
+        return false;
+    }
+
+    uint16_t v5 = get_v5_rail_mv();
+    if (v5 == 0) {
+        *out_mv = 0;
+        return true;
+    }
+
+    // ADS7830 8-bit reading maps to 0..V5. ADS measures across divider bottom side to device
+    float vadc_mv = ((float)raw / 255.0f) * (float)v5;
+    // Board input divider: top 5.1k, bottom 10k -> Vin = vadc * (15100 / 10000)
+    float vin_mv = vadc_mv * (15100.0f / 10000.0f);
+    *out_mv = (uint16_t)(vin_mv + 0.5f);
+    return true;
+}
+
 
 /**
  * @brief Initializes the CPU temperature sensor.
@@ -91,27 +127,52 @@ void initAdcChannels(void){
     adc_oneshot_unit_init_cfg_t unit_cfg = { .unit_id = ADC_UNIT };
     ESP_ERROR_CHECK(adc_oneshot_new_unit(&unit_cfg, &adc_handle));
 
-    for (adc_channel_t ch = ADC_CHANNEL_START; ch <= ADC_CHANNEL_END; ch++) {
-        adc_oneshot_chan_cfg_t chan_cfg = { .bitwidth = ADC_BITWIDTH_DEFAULT, .atten = ADC_ATTEN_DB_12 };
+    // Only configure ADC channels used for monitoring (V5 rail, USB, external voltage)
+    adc_channel_t monitor_chs[] = { V5_REF_ADC_CHANNEL, USB_ADC_CHANNEL, EXT_VOLT_ADC_CHANNEL };
+    for (size_t i = 0; i < sizeof(monitor_chs)/sizeof(monitor_chs[0]); ++i) {
+        adc_channel_t ch = monitor_chs[i];
+        adc_oneshot_chan_cfg_t chan_cfg = { .bitwidth = ADC_BITWIDTH_DEFAULT, .atten = ADC_ATTEN_DB_11 };
         esp_err_t err = adc_oneshot_config_channel(adc_handle, ch, &chan_cfg);
         if (err != ESP_OK) {
             ESP_LOGW(adc_log, "Failed to Configure ADC Channel: %d (%s)", ch, esp_err_to_name(err));
             continue;
         } else {
-            ESP_LOGI(adc_log, "Configured ADC Channel: %d", ch);
+            ESP_LOGI(adc_log, "Configured Monitor ADC Channel: %d", ch);
         }
 
-        adc_cali_curve_fitting_config_t cali_cfg = { .unit_id = ADC_UNIT, .atten = ADC_ATTEN_DB_12, .bitwidth = ADC_BITWIDTH_DEFAULT };
-
+        adc_cali_curve_fitting_config_t cali_cfg = { .unit_id = ADC_UNIT, .atten = ADC_ATTEN_DB_11, .bitwidth = ADC_BITWIDTH_DEFAULT };
         adc_cali_handle_t cali_handle = NULL;
         esp_err_t ret = adc_cali_create_scheme_curve_fitting(&cali_cfg, &cali_handle);
         if (ret == ESP_OK) {
             cali_handles[ch] = cali_handle;
-            ESP_LOGI(adc_log, "Calibration Created for ADC Channel: %d", ch);
+            ESP_LOGI(adc_log, "Calibration Created for Monitor ADC Channel: %d", ch);
         } else {
-            ESP_LOGW(adc_log, "Failed to Create Calibration for ADC Channel: %d (%s)", ch, esp_err_to_name(ret));
+            ESP_LOGW(adc_log, "Failed to Create Calibration for Monitor ADC Channel: %d (%s)", ch, esp_err_to_name(ret));
         }
     }
+
+    // Initialize external ADS7830 ADCs on I2C (two devices expected)
+    if (!ads7830_init()) {
+        ESP_LOGW(adc_log, "ADS7830 initialization/reporting encountered issues");
+    }
+}
+
+// Read USB voltage (GPIO38) and reconstruct actual voltage using 8.2k/10k divider
+uint16_t get_usb_voltage_mv(void)
+{
+    uint16_t measured = getScaledMillivolts(USB_ADC_CHANNEL, true, 1.0f);
+    if (measured == 0) return 0;
+    float v = ((float)measured) * (8200.0f + 10000.0f) / 10000.0f; // V = measured*(18200/10000)
+    return (uint16_t)(v + 0.5f);
+}
+
+// Read external voltage (GPIO9) and reconstruct actual voltage using 47k/10k divider
+uint16_t get_external_voltage_mv(void)
+{
+    uint16_t measured = getScaledMillivolts(EXT_VOLT_ADC_CHANNEL, true, 1.0f);
+    if (measured == 0) return 0;
+    float v = ((float)measured) * (47000.0f + 10000.0f) / 10000.0f; // V = measured*(57000/10000)
+    return (uint16_t)(v + 0.5f);
 }
 
 /**
@@ -303,59 +364,59 @@ void adcProcess(void *arg) {
     uint16_t samples[FILTER_DEPTH_MAX];
     
     while (1) {
-        for (int ch = ADC_CHANNEL_START; ch <= ADC_CHANNEL_END; ch++) {
-            // Calculate scaling factor dynamically from pullup resistor
-            float scaling = (float)DIVIDER_TOTAL_OHM / DIVIDER_LOW_OHM;  // Base divider: 14.7k / 10k = 1.47
-            
-            if (board_cfg.channels[ch].pullup_ohms > 0) {
-                // Include pullup in series resistance calculation
-                scaling = ((float)board_cfg.channels[ch].pullup_ohms + DIVIDER_TOTAL_OHM) / DIVIDER_TOTAL_OHM;
-            }
-            
-            // determine filtering depth based on configured level
-            switch (board_cfg.channels[ch].filtering) {
-                case FILTER_LOW:
-                case FILTER_MED:
-                case FILTER_HIGH: {
-                    int depth = FILTER_DEPTH_MED;
-                    if (board_cfg.channels[ch].filtering == FILTER_LOW) {
-                        depth = FILTER_DEPTH_LOW;
-                    } else if (board_cfg.channels[ch].filtering == FILTER_HIGH) {
-                        depth = FILTER_DEPTH_HIGH;
-                    }
+        for (int ch = 0; ch < NUM_ANALOG_INPUTS; ch++) {
+            int depth = FILTER_DEPTH_MED;
+            if (board_cfg.channels[ch].filtering == FILTER_LOW) depth = FILTER_DEPTH_LOW;
+            if (board_cfg.channels[ch].filtering == FILTER_HIGH) depth = FILTER_DEPTH_HIGH;
 
-                    // Apply median filtering with `depth` samples
-                    bool sample_valid = true;
-                    for (int i = 0; i < depth; i++) {
-                        uint16_t sample = getScaledMillivolts(ch, true, scaling);
-                        if (sample == 0) {
-                            sample_valid = false;
-                        }
-                        samples[i] = sample;
-                        vTaskDelay(pdMS_TO_TICKS(2));
-                    }
-
-                    if (sample_valid) {
-                        uint16_t filtered = medianFilterHelper(samples, depth);
-                        if (xSemaphoreTake(filtered_voltages_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
-                            filtered_voltages[ch] = filtered;
-                            xSemaphoreGive(filtered_voltages_mutex);
-                        }
-                    }
-                    break;
+            bool sample_valid = true;
+            for (int i = 0; i < depth; ++i) {
+                if (!read_analog_raw(ch, &samples[i]) || samples[i] == 0) {
+                    sample_valid = false;
                 }
-                default: {
-                    // FILTER_NONE or invalid value: no filtering
-                    uint16_t raw = getScaledMillivolts(ch, true, scaling);
-                    if (xSemaphoreTake(filtered_voltages_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
-                        filtered_voltages[ch] = raw;
-                        xSemaphoreGive(filtered_voltages_mutex);
-                    }
-                    break;
+                vTaskDelay(pdMS_TO_TICKS(2));
+            }
+
+            if (sample_valid) {
+                uint16_t filtered = medianFilterHelper(samples, depth);
+                if (xSemaphoreTake(filtered_voltages_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+                    filtered_voltages[ch] = filtered;
+                    xSemaphoreGive(filtered_voltages_mutex);
+                }
+            } else {
+                if (xSemaphoreTake(filtered_voltages_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+                    filtered_voltages[ch] = 0;
+                    xSemaphoreGive(filtered_voltages_mutex);
                 }
             }
         }
+
         vTaskDelay(pdMS_TO_TICKS(10));
     }
     vTaskDelete(NULL);
+}
+
+void pressureProcess(void *arg) {
+    ESP_LOGI(adc_log, "Pressure Sensor Processing Task Started");
+    while (1) {
+        if (xSemaphoreTake(scaled_pressures_mutex, pdMS_TO_TICKS(5)) == pdTRUE) {
+            scaled_pressures[0] = (filtered_voltages[0] > 0) ? getSensorPressure(filtered_voltages[0], 500, 4500 , 50, 300) : 0;
+            scaled_pressures[1] = (filtered_voltages[1] > 0) ? getSensorPressure(filtered_voltages[1], 500, 4500, 0, 100) : 0;
+            scaled_pressures[2] = (filtered_voltages[2] > 0) ? getSensorPressure(filtered_voltages[2], 400, 4650, 20, 300) : 0;
+            scaled_pressures[3] = (filtered_voltages[3] > 0) ? getSensorPressure(filtered_voltages[3], 500, 4500, 0, 6.89) : 0;
+            xSemaphoreGive(scaled_pressures_mutex);
+        }
+        vTaskDelay(pdMS_TO_TICKS(30));
+    }
+    vTaskDelete(NULL);
+}
+
+uint16_t get_v5_rail_mv(void)
+{
+    uint16_t measured_mv = getScaledMillivolts(V5_REF_ADC_CHANNEL, true, 1.0f);
+    if (measured_mv == 0) return 0;
+    // Divider: top = 18k, bottom = 33k -> V5 = measured * (51/33)
+    float v5 = ((float)measured_mv) * (51.0f / 33.0f);
+    return (uint16_t)(v5 + 0.5f);
+}
 }
