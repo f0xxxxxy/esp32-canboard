@@ -25,9 +25,11 @@
 #define FILTER_DEPTH_MAX FILTER_DEPTH_HIGH        ///< Maximum buffer size required for filtering
 
 /* Divider constants used by scaling helpers */
-#define DIVIDER_HIGH_OHM 4700                      ///< Series resistor value (4.7k ohm)
+// Top resistor (series to input) and bottom resistor (pull to ground)
+// Per hardware: top = 5.1k, bottom = 10k for all 16 ADC input pull-ups
+#define DIVIDER_HIGH_OHM 5100                      ///< Series resistor value (5.1k ohm)
 #define DIVIDER_LOW_OHM 10000                      ///< Pull-to-ground resistor value (10k ohm)
-#define DIVIDER_TOTAL_OHM (DIVIDER_HIGH_OHM + DIVIDER_LOW_OHM) ///< Total divider impedance (14.7k ohm)
+#define DIVIDER_TOTAL_OHM (DIVIDER_HIGH_OHM + DIVIDER_LOW_OHM) ///< Total divider impedance (15.1k ohm)
 
 /// Log tag for ADC module
 static const char *adc_log = "adc";

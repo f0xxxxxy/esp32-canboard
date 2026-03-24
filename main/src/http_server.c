@@ -26,6 +26,7 @@ static httpd_handle_t server = NULL;
 extern board_config_t board_cfg;
 extern twai_handle_t twai_can;
 extern esp_err_t can_init(void);
+extern esp_err_t register_inputs_uri(httpd_handle_t server);
 
 static bool apply_runtime_config(const board_config_t *cfg) {
     if (cfg == NULL) {
@@ -151,9 +152,9 @@ esp_err_t config_get_handler(httpd_req_t *req) {
     size_t json_pos = 0;
     const size_t json_max = 4096;
     
-    // Start JSON object including CAN speed, base ID and pull-up Vref
-    json_pos += snprintf(json + json_pos, json_max - json_pos, "{\"can_speed_kbps\":%lu,\"can_start_id\":%lu,\"pullup_vref_mv\":%u,\"channels\":[",
-        (unsigned long)cfg.can_speed_kbps, (unsigned long)cfg.can_start_id, (unsigned)cfg.pullup_vref_mv);
+    // Start JSON object including config version, CAN speed and base ID
+    json_pos += snprintf(json + json_pos, json_max - json_pos, "{\"version\":%u,\"can_speed_kbps\":%lu,\"can_start_id\":%lu,\"channels\":[",
+        (unsigned int)CONFIG_VERSION, (unsigned long)cfg.can_speed_kbps, (unsigned long)cfg.can_start_id);
     
     for (int i = 0; i < CONFIG_CHANNELS; ++i) {
         json_pos += snprintf(json + json_pos, json_max - json_pos,
@@ -339,10 +340,7 @@ esp_err_t config_post_handler(httpd_req_t *req) {
         }
     }
 
-    cJSON *pullup_vref = cJSON_GetObjectItem(root, "pullup_vref_mv");
-    if (pullup_vref && cJSON_IsNumber(pullup_vref)) {
-        cfg.pullup_vref_mv = (uint16_t)pullup_vref->valueint;
-    }
+    // Note: pullup_vref_mv is no longer provided by UI/config; V5 rail is measured live
 
     cJSON_Delete(root);
     free(buf);
@@ -433,7 +431,7 @@ esp_err_t ntc_tables_get_handler(httpd_req_t *req) {
 esp_err_t live_values_get_handler(httpd_req_t *req) {
     notify_client_connected();
 
-    uint16_t voltages_copy[NUM_ADC_CHANNELS] = {0};
+    uint16_t voltages_copy[NUM_ANALOG_INPUTS] = {0};
     if (xSemaphoreTake(filtered_voltages_mutex, pdMS_TO_TICKS(20)) == pdTRUE) {
         memcpy(voltages_copy, (const void *)filtered_voltages, sizeof(voltages_copy));
         xSemaphoreGive(filtered_voltages_mutex);
@@ -469,15 +467,16 @@ esp_err_t live_values_get_handler(httpd_req_t *req) {
             int8_t temp_c = getSensorTemperature(
                 voltages_copy[i],
                 board_cfg.channels[i].pullup_ohms,
-                board_cfg.pullup_vref_mv,
+                get_v5_rail_mv(),
                 table ? table->points : NULL,
                 table ? table->points_count : 0);
 
             int32_t r_ntc = -1;
-            if (voltages_copy[i] > 0 && voltages_copy[i] < board_cfg.pullup_vref_mv &&
-                board_cfg.channels[i].pullup_ohms > 0 && board_cfg.pullup_vref_mv > 0) {
+            uint16_t v5_ref = get_v5_rail_mv();
+            if (voltages_copy[i] > 0 && v5_ref > 0 && voltages_copy[i] < v5_ref &&
+                board_cfg.channels[i].pullup_ohms > 0) {
                 float v_ntc = (float)voltages_copy[i] / 1000.0f;
-                float v_ref = (float)board_cfg.pullup_vref_mv / 1000.0f;
+                float v_ref = (float)v5_ref / 1000.0f;
                 float r_ntc_f = ((float)board_cfg.channels[i].pullup_ohms * v_ntc) / (v_ref - v_ntc);
                 r_ntc = (int32_t)(r_ntc_f + 0.5f);
             }
@@ -537,8 +536,8 @@ esp_err_t config_export_get_handler(httpd_req_t *req) {
 
     size_t json_pos = 0;
     const size_t json_max = 4096;
-    json_pos += snprintf(json + json_pos, json_max - json_pos, "{\"can_speed_kbps\":%lu,\"can_start_id\":%lu,\"pullup_vref_mv\":%u,\"channels\":[",
-        (unsigned long)cfg.can_speed_kbps, (unsigned long)cfg.can_start_id, (unsigned)cfg.pullup_vref_mv);
+    json_pos += snprintf(json + json_pos, json_max - json_pos, "{\"can_speed_kbps\":%lu,\"can_start_id\":%lu,\"channels\":[",
+        (unsigned long)cfg.can_speed_kbps, (unsigned long)cfg.can_start_id);
 
     for (int i = 0; i < CONFIG_CHANNELS; ++i) {
         json_pos += snprintf(json + json_pos, json_max - json_pos,
@@ -609,6 +608,16 @@ esp_err_t config_import_post_handler(httpd_req_t *req) {
         ESP_LOGW(TAG, "Invalid JSON import");
         free(buf);
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
+        return ESP_FAIL;
+    }
+
+    // Require explicit version match for imports (fresh-only imports)
+    cJSON *ver = cJSON_GetObjectItem(root, "version");
+    if (!ver || !cJSON_IsNumber(ver) || (uint32_t)ver->valueint != CONFIG_VERSION) {
+        ESP_LOGW(TAG, "Rejected import due to incompatible or missing version");
+        cJSON_Delete(root);
+        free(buf);
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Unsupported config version");
         return ESP_FAIL;
     }
 
@@ -729,10 +738,7 @@ esp_err_t config_import_post_handler(httpd_req_t *req) {
         }
     }
 
-    cJSON *pullup_vref = cJSON_GetObjectItem(root, "pullup_vref_mv");
-    if (pullup_vref && cJSON_IsNumber(pullup_vref)) {
-        cfg.pullup_vref_mv = (uint16_t)pullup_vref->valueint;
-    }
+    // Ignore any pullup_vref_mv in imported JSON — V5 rail is measured at runtime
 
     // Backup existing config file before overwrite
     const char *path = "/spiffs/config.bin";
@@ -864,6 +870,10 @@ void start_http_server(void) {
         .user_ctx = NULL
     };
     httpd_register_uri_handler(server, &live_values_uri);
+
+    if (register_inputs_uri(server) != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to register /api/inputs");
+    }
     
     ESP_LOGI(TAG, "HTTP server started on http://192.168.4.1");
 }

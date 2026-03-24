@@ -190,7 +190,7 @@ void config_set_defaults(board_config_t *cfg) {
     cfg->version = CONFIG_VERSION;
     cfg->can_start_id = 0x100;
     cfg->can_speed_kbps = 500; // Default CAN speed 500 kbps
-    cfg->pullup_vref_mv = 5025; // Default pull-up reference voltage (mV)
+    // V5 reference is measured live; no stored pullup_vref_mv
     
     for (int i = 0; i < CONFIG_CHANNELS; ++i) {
         snprintf(cfg->channels[i].name, CONFIG_NAME_LEN, "Input %d", i + 1);

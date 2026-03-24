@@ -150,11 +150,11 @@
                     <span class="hex-prefix">0x</span>
                     <input id="base-can-id" name="can_start_id" class="hex-input" maxlength="3" value="100" />
                 </div>
-                <label for="pullup-vref">vRef:</label>
-                <div style="display:flex; align-items:center; gap:0.25em;">
-                    <input id="pullup-vref" name="pullup_vref_mv" class="small-input no-spin" type="number" min="0" max="9999" value="5025" />
-                    <span class="unit">mV</span>
+                <div style="display:flex; align-items:center; gap:0.5em; margin-left:0.6em;">
+                    <span style="font-size:0.95rem; color:#333;">V5:</span>
+                    <span id="v5-rail" class="unit">-- mV</span>
                 </div>
+                <!-- vRef is measured live; pullup_vref field removed -->
             </div>
             <button id="save-btn" class="action-btn" type="submit">Save Config</button>
             <button id="backup-btn" class="action-btn backup" type="button">Backup</button>
@@ -285,7 +285,7 @@
 
     function validateConfig(form) {
         let error = "";
-        for (let i = 0; i < 10; ++i) {
+        for (let i = 0; i < 16; ++i) {
             const name = form[`name${i}`].value.trim();
             if (!name) error += `Channel ${i+1}: Name required. `;
             const pullup = parseInt(form[`pullup${i}`].value);
@@ -338,7 +338,7 @@
     }
 
     function attachTypeHandlers() {
-        for (let i = 0; i < 10; ++i) {
+        for (let i = 0; i < 16; ++i) {
             const sel = document.querySelector(`[name="type${i}"]`);
             if (!sel) continue;
             sel.onchange = () => updateRowControls(i);
@@ -357,35 +357,42 @@
         if (config.can_start_id !== undefined) {
             baseElem.value = config.can_start_id.toString(16).toUpperCase();
         }
-        // Set pull-up Vref if provided
-        const pullupElem = document.getElementById('pullup-vref');
-        if (pullupElem) pullupElem.value = (config.pullup_vref_mv !== undefined) ? config.pullup_vref_mv : 5025;
+        // vRef is measured live; no stored pullup_vref to set
         await refreshLiveValues();
     }
 
     async function refreshLiveValues() {
         try {
-            const res = await fetch('/api/live_values', { cache: 'no-store' });
+            const res = await fetch('/api/inputs', { cache: 'no-store' });
             if (!res.ok) return;
             const live = await res.json();
             if (!live || !Array.isArray(live.channels)) return;
 
-            for (let i = 0; i < 10; ++i) {
+            const v5elem = document.getElementById('v5-rail');
+            if (v5elem) {
+                if (typeof live.v5_rail_mv === 'number' && live.v5_rail_mv > 0) {
+                    v5elem.textContent = `${live.v5_rail_mv} mV`;
+                } else {
+                    v5elem.textContent = `-- mV`;
+                }
+            }
+
+            for (let i = 0; i < 16; ++i) {
                 const ch = live.channels[i];
                 if (!ch) continue;
                 const voltageEl = document.getElementById(`live-voltage-${i}`);
                 const valueEl = document.getElementById(`live-value-${i}`);
 
                 if (voltageEl) {
-                    if (typeof ch.voltage_v === 'number') {
-                        voltageEl.textContent = `${Math.round(ch.voltage_v * 1000)} mV`;
+                    if (ch.mv !== null && typeof ch.mv === 'number') {
+                        voltageEl.textContent = `${ch.mv} mV`;
                     } else {
                         voltageEl.textContent = '--';
                     }
                 }
 
                 if (valueEl) {
-                    valueEl.textContent = ch.value || '';
+                    valueEl.textContent = '';
                 }
             }
         } catch (e) {
@@ -411,7 +418,7 @@
             const dec = parseInt(baseVal);
             config.can_start_id = isNaN(dec) ? (config.can_start_id || 0x100) : dec;
         }
-        for (let i = 0; i < 10; ++i) {
+        for (let i = 0; i < 16; ++i) {
             config.channels[i].name = form[`name${i}`].value.trim();
             config.channels[i].pullup_ohms = parseInt(form[`pullup${i}`].value);
             config.channels[i].type = parseInt(form[`type${i}`].value);
@@ -428,9 +435,6 @@
                 };
             }
         }
-        // Read pull-up Vref
-        const pv = parseInt(document.getElementById('pullup-vref').value);
-        config.pullup_vref_mv = isNaN(pv) ? (config.pullup_vref_mv || 5025) : pv;
         try {
             const resp = await fetch('/api/config', {
                 method: 'POST',
