@@ -25,6 +25,7 @@
 #include "inc/config.h"
 #include "esp_spiffs.h"
 
+#include "inc/i2c_master.h"
 // Global board configuration (shared with other modules)
 board_config_t board_cfg;
 
@@ -69,8 +70,12 @@ void app_main(void)
         ESP_LOGI(log_tag, "Current CPU Temperature: %d°C", cpu_temp);
     }
 
+
     // Initialize ADC channels
     initAdcChannels();
+
+    // Scan I2C bus for devices
+    i2c_master_scan();
 
     // Initialize TWAI/CAN driver with dynamic speed from config
     if (can_init() != ESP_OK) {

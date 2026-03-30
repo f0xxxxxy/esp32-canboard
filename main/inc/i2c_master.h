@@ -1,3 +1,4 @@
+void i2c_master_scan(void);
 // Minimal I2C master helper (stub)
 #pragma once
 #include <stdint.h>

@@ -1,3 +1,4 @@
+#define NTC_TABLE_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
 #pragma once
 
 #include "freertos/semphr.h"
@@ -162,6 +163,7 @@ static const ntc_table_def_t ntc_tables[] = {
         .points = bosch_tmap_0281002437_points,
         .points_count = NTC_TABLE_SIZE(bosch_tmap_0281002437_points)
     }
+   #define NTC_TABLE_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
     ,{
         .name = "Universal 1/8 NPT",
         .description = "Universal 18 NPT (EFI Parts)",

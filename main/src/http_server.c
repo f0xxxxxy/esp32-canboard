@@ -799,6 +799,7 @@ void start_http_server(void) {
     // Start HTTP server
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.uri_match_fn = httpd_uri_match_wildcard;
+    config.max_uri_handlers = 16; // Increase from default 8 to 16 to allow more handlers
     
     ret = httpd_start(&server, &config);
     if (ret != ESP_OK) {

@@ -7,6 +7,7 @@ idf_component_register(SRCS "main.c"
                         "src/i2c_master.c"
                         "src/ads7830.c"
                         "src/http_api.c"
+                        "src/i2c_scan.c"
                     INCLUDE_DIRS "."
                     "./src"
                     "./inc")

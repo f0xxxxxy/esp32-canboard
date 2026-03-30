@@ -419,4 +419,3 @@ uint16_t get_v5_rail_mv(void)
     float v5 = ((float)measured_mv) * (51.0f / 33.0f);
     return (uint16_t)(v5 + 0.5f);
 }
-}
