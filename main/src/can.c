@@ -100,11 +100,23 @@ void canTransmit(void *arg)
             if (board_cfg.channels[i].type == SENSOR_RAW) {
                 dyn[i] = 0;
             } else if (board_cfg.channels[i].type == SENSOR_PRESSURE) {
-                dyn[i] = getSensorPressure(voltages_copy[i],
+                uint16_t p_kpa_x100 = getSensorPressure(voltages_copy[i],
                                            board_cfg.channels[i].params.pressure.min_mv,
                                            board_cfg.channels[i].params.pressure.max_mv,
                                            board_cfg.channels[i].params.pressure.min_kpa,
                                            board_cfg.channels[i].params.pressure.max_kpa);
+                // Convert transmitted value according to selected unit.
+                // getSensorPressure() returns kPa * 100 (0.01 kPa resolution).
+                uint16_t out_val = p_kpa_x100;
+                uint8_t unit = board_cfg.channels[i].params.pressure.pressure_unit;
+                if (unit == UNIT_BAR) {
+                    // 1 bar = 100 kPa -> bar*100 = (kPa*100) / 100
+                    out_val = (uint16_t)((float)p_kpa_x100 / 100.0f + 0.5f);
+                } else if (unit == UNIT_PSI) {
+                    // 1 psi = 6.89476 kPa -> psi*100 = (kPa*100) / 6.89476
+                    out_val = (uint16_t)((float)p_kpa_x100 / 6.89476f + 0.5f);
+                }
+                dyn[i] = out_val;
             } else if (board_cfg.channels[i].type == SENSOR_NTC) {
                 const ntc_table_def_t *t = ntc_get_table(board_cfg.channels[i].params.ntc.table_id);
                 int8_t temp = getSensorTemperature(voltages_copy[i], board_cfg.channels[i].pullup_ohms, get_v5_rail_mv(),

@@ -1,6 +1,8 @@
 #include "i2c_master.h"
 #include "driver/i2c.h"
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 static const char *TAG = "i2c_master";
 
@@ -24,6 +26,9 @@ bool i2c_master_init(gpio_num_t sda_gpio, gpio_num_t scl_gpio)
         ESP_LOGE(TAG, "i2c_driver_install failed: %d", err);
         return false;
     }
+    // Small delay after I2C init: some ADC/I2C devices may not respond immediately
+    // Increased to 300 ms to improve reliability on power-up/boot
+    vTaskDelay(pdMS_TO_TICKS(300));
     return true;
 }
 

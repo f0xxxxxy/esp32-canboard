@@ -2,15 +2,14 @@
 * ESP32-S3 Dual Core SoC
 * MCP2562T CAN Transceiver (up to 1Mbps)
 * 16x 5V-tolerant Inputs via two ADS7830 I2C expanders (16 analog channels)
+* Internal 5V rail reference for accurate output calculation
 * 2x 5V Outputs - Fused at 500mA (Thermal Reset)
 * USB-C for programming, with JTAG support for debugging
 * ESD Protection on both USB and CAN
-* JAE Automotive Connector (PCB Socket: MX23A18NF1, Cable Plug: MX23A18SF1)
+* TE Connectivity AMP 26 Way SuperSeal Connector (PCB Socket: 9-6437287-8, Cable Plug: 3-1437290-7)
 * Optional pull-up resistors via fused 5V rail for each input (TH 6.3mm)
-* Optional 120ohm CAN terminating resistor
 * Configuration via web interface over WiFi
 * Optional per-channel median filtering with selectable strength (none/low/med/high) to reduce noise
-* Small PCB Footprint - 40mm x 60mm
 
 ## Device Configuration
 
@@ -22,11 +21,11 @@ On each boot the board enables a WiFi access point and web configuration interfa
 
 The web UI allows you to:
 
-- View and edit per-channel settings (name, sensor type, pull-up, **filter level** dropdown, pressure calibration).
+- View and edit per-channel settings (name, sensor type, pull-up, pressure unit, filter level, voltage and pressure calibration).
 - Configure required CAN parameters - Base ID and bus speed.
-- View current input voltages and calculated values in real time.
+- View current 5V rail reference, input voltages and calculated values in real time.
 - Backup the entire configuration to a JSON file.
-- Restore configuration from a previously exported JSON file (import now requires a top-level `version` matching the firmware `CONFIG_VERSION`).
+- Restore configuration from a previously exported JSON file.
 
 ![esp32-canboard-configuration](docs/esp32-canboard-configuration.png)
 
@@ -39,8 +38,6 @@ The web UI allows you to:
 
 **Notes:**
 - Configuration is persisted on SPIFFS at `/spiffs/config.bin` (binary) and the web UI uses JSON export/import for human-readable backups.
-- The firmware measures the 5V rail (V5) at runtime and no longer stores a pull‑up reference value; the UI no longer exposes a pull‑up vRef control.
-
 
 ## CAN Output
 
@@ -83,31 +80,3 @@ Example DBC for signal names and scaling: [dbc/esp32-canboard.dbc](dbc/esp32-can
 ![esp32-canboard-top](docs/esp32-canboard-top.png)
 
 ![esp32-canboard-bottom](docs/esp32-canboard-bottom.png)
-
-## Hardware / Wiring Notes (important changes)
-
-- Analog inputs: expanded to 16 channels using two ADS7830 I2C analog expanders (8 channels each). I2C pins: SDA = GPIO12, SCL = GPIO13.
-- Internal ADCs are used to monitor rails: V5 rail (divider connected to GPIO3), USB voltage monitor on GPIO38, and external voltage monitor on GPIO9.
-- CAN1 pins remapped: RX = GPIO10, TX = GPIO11.
-
-Pin names and exact connector mapping remain as in the schematic; see [Schematic PDF](docs/esp32-canboard-schematic.pdf) for physical connector assignments.
-
-## Web API changes
-
-- New endpoint: `GET /api/inputs` — returns JSON: `{ "v5_rail_mv": <uint16>, "channels": [ {"index":<n>, "mv": <uint16|null>}, ... ] }` where `mv` is the measured channel voltage in millivolts or `null` if not present.
-- The web UI was updated to present 16 channels and no longer shows a stored pull-up vRef control; V5 is measured live and used for NTC conversions.
-
-## Configuration / Import-Export
-
-- The configuration structure version has been bumped; the firmware expects `CONFIG_VERSION = 4`.
-- Exported JSON now contains a top-level `"version"` field. Import is strict: the device will reject imported JSON unless the top-level `version` matches the firmware `CONFIG_VERSION` (fresh-only imports).
-
-## Build & Test
-
-Build locally using your ESP‑IDF environment as before:
-
-```bash
-idf.py build
-```
-
-Run hardware validation for I2C ADS7830 timing and CAN traffic on a bus monitor after flashing.

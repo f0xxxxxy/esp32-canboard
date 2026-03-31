@@ -74,8 +74,7 @@ void app_main(void)
     // Initialize ADC channels
     initAdcChannels();
 
-    // Scan I2C bus for devices
-    i2c_master_scan();
+    // I2C scan removed: not required
 
     // Initialize TWAI/CAN driver with dynamic speed from config
     if (can_init() != ESP_OK) {

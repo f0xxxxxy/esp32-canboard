@@ -127,8 +127,9 @@ void initAdcChannels(void){
     adc_oneshot_unit_init_cfg_t unit_cfg = { .unit_id = ADC_UNIT };
     ESP_ERROR_CHECK(adc_oneshot_new_unit(&unit_cfg, &adc_handle));
 
-    // Only configure ADC channels used for monitoring (V5 rail, USB, external voltage)
-    adc_channel_t monitor_chs[] = { V5_REF_ADC_CHANNEL, USB_ADC_CHANNEL, EXT_VOLT_ADC_CHANNEL };
+    // Only configure ADC channels used for monitoring (V5 rail, external voltage)
+    // USB presence is on GPIO38 (digital) and is not configured as an ADC channel.
+    adc_channel_t monitor_chs[] = { V5_REF_ADC_CHANNEL, EXT_VOLT_ADC_CHANNEL };
     for (size_t i = 0; i < sizeof(monitor_chs)/sizeof(monitor_chs[0]); ++i) {
         adc_channel_t ch = monitor_chs[i];
         adc_oneshot_chan_cfg_t chan_cfg = { .bitwidth = ADC_BITWIDTH_DEFAULT, .atten = ADC_ATTEN_DB_11 };
@@ -157,13 +158,28 @@ void initAdcChannels(void){
     }
 }
 
-// Read USB voltage (GPIO38) and reconstruct actual voltage using 8.2k/10k divider
+// Read USB presence on GPIO38 (digital). GPIO38 is not ADC-capable on this package.
 uint16_t get_usb_voltage_mv(void)
 {
-    uint16_t measured = getScaledMillivolts(USB_ADC_CHANNEL, true, 1.0f);
-    if (measured == 0) return 0;
-    float v = ((float)measured) * (8200.0f + 10000.0f) / 10000.0f; // V = measured*(18200/10000)
-    return (uint16_t)(v + 0.5f);
+    static bool usb_gpio_initialized = false;
+    if (!usb_gpio_initialized) {
+        gpio_config_t io_conf = {
+            .pin_bit_mask = (1ULL << 38),
+            .mode = GPIO_MODE_INPUT,
+            .pull_up_en = GPIO_PULLUP_DISABLE,
+            .pull_down_en = GPIO_PULLDOWN_DISABLE,
+            .intr_type = GPIO_INTR_DISABLE
+        };
+        gpio_config(&io_conf);
+        usb_gpio_initialized = true;
+    }
+
+    int level = gpio_get_level(GPIO_NUM_38);
+    if (level) {
+        // USB present — return an approximate 5V indication in mV
+        return 5000;
+    }
+    return 0;
 }
 
 // Read external voltage (GPIO9) and reconstruct actual voltage using 47k/10k divider
@@ -286,7 +302,15 @@ uint16_t getScaledMillivolts(adc_channel_t channel, bool scaled, float scaling_f
     }
 
     int raw, voltage = 0;
-    esp_err_t err = adc_oneshot_read(adc_handle, channel, &raw);
+    esp_err_t err = ESP_ERR_TIMEOUT;
+    const int max_tries = 3;
+    int tries = 0;
+    while (tries < max_tries) {
+        err = adc_oneshot_read(adc_handle, channel, &raw);
+        if (err == ESP_OK) break;
+        tries++;
+        vTaskDelay(pdMS_TO_TICKS(5));
+    }
     if (err != ESP_OK) {
         ESP_LOGE(adc_log, "ADC Read Failed on Channel: %d (%s)", channel, esp_err_to_name(err));
         return 0;

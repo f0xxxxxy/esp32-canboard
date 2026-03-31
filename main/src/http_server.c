@@ -173,11 +173,12 @@ esp_err_t config_get_handler(httpd_req_t *req) {
                 table ? table->name : "Unknown");
         } else if (cfg.channels[i].type == SENSOR_PRESSURE) {
             json_pos += snprintf(json + json_pos, json_max - json_pos, 
-                "\"pressure\":{\"min_mv\":%u,\"max_mv\":%u,\"min_kpa\":%.2f,\"max_kpa\":%.2f}}}",
+                "\"pressure\":{\"min_mv\":%u,\"max_mv\":%u,\"min_kpa\":%.2f,\"max_kpa\":%.2f,\"pressure_unit\":%u}}}",
                 cfg.channels[i].params.pressure.min_mv,
                 cfg.channels[i].params.pressure.max_mv,
                 cfg.channels[i].params.pressure.min_kpa,
-                cfg.channels[i].params.pressure.max_kpa);
+                cfg.channels[i].params.pressure.max_kpa,
+                (unsigned int)cfg.channels[i].params.pressure.pressure_unit);
         } else {
             json_pos += snprintf(json + json_pos, json_max - json_pos, "\"raw\":{}}}");
         }
@@ -205,22 +206,48 @@ esp_err_t config_get_handler(httpd_req_t *req) {
  * @return ESP_OK on successful save, ESP_FAIL on JSON parse error or config validation failure
  */
 esp_err_t config_post_handler(httpd_req_t *req) {
-    const size_t REQ_BUF_SIZE = 2048;
-    char *buf = malloc(REQ_BUF_SIZE);
-    if (!buf) {
-        ESP_LOGE(TAG, "Failed to allocate request buffer");
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Server error");
-        return ESP_FAIL;
+    // Read entire request body. Use Content-Length when available to avoid truncation.
+    size_t content_len = req->content_len;
+    char *buf = NULL;
+    if (content_len > 0) {
+        // allocate based on content length (+1 for NUL)
+        buf = malloc(content_len + 1);
+        if (!buf) {
+            ESP_LOGE(TAG, "Failed to allocate request buffer (len=%u)", (unsigned)content_len);
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Server error");
+            return ESP_FAIL;
+        }
+        size_t received = 0;
+        while (received < content_len) {
+            int r = httpd_req_recv(req, buf + received, content_len - received);
+            if (r <= 0) {
+                ESP_LOGE(TAG, "Failed to receive request body (received %u/%u)", (unsigned)received, (unsigned)content_len);
+                free(buf);
+                httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Request error");
+                return ESP_FAIL;
+            }
+            received += r;
+        }
+        buf[received] = 0;
+    } else {
+        // Fallback: read up to a reasonable default size
+        const size_t REQ_BUF_SIZE = 2048;
+        buf = malloc(REQ_BUF_SIZE);
+        if (!buf) {
+            ESP_LOGE(TAG, "Failed to allocate request buffer");
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Server error");
+            return ESP_FAIL;
+        }
+        int ret = httpd_req_recv(req, buf, REQ_BUF_SIZE - 1);
+        if (ret <= 0) {
+            ESP_LOGE(TAG, "Failed to receive request body");
+            free(buf);
+            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Request error");
+            return ESP_FAIL;
+        }
+        buf[ret] = 0;
+        content_len = ret;
     }
-
-    int ret = httpd_req_recv(req, buf, REQ_BUF_SIZE - 1);
-    if (ret <= 0) {
-        ESP_LOGE(TAG, "Failed to receive request body");
-        free(buf);
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Request error");
-        return ESP_FAIL;
-    }
-    buf[ret] = 0;
     
     cJSON *root = cJSON_Parse(buf);
     if (!root) {
@@ -307,6 +334,7 @@ esp_err_t config_post_handler(httpd_req_t *req) {
             cJSON *max_mv = cJSON_GetObjectItem(pressure, "max_mv");
             cJSON *min_kpa = cJSON_GetObjectItem(pressure, "min_kpa");
             cJSON *max_kpa = cJSON_GetObjectItem(pressure, "max_kpa");
+            cJSON *unit = cJSON_GetObjectItem(pressure, "pressure_unit");
             
             if (!cJSON_IsNumber(min_mv) || !cJSON_IsNumber(max_mv) || 
                 !cJSON_IsNumber(min_kpa) || !cJSON_IsNumber(max_kpa)) {
@@ -319,6 +347,13 @@ esp_err_t config_post_handler(httpd_req_t *req) {
             cfg.channels[i].params.pressure.max_mv = (uint16_t)max_mv->valueint;
             cfg.channels[i].params.pressure.min_kpa = (float)min_kpa->valuedouble;
             cfg.channels[i].params.pressure.max_kpa = (float)max_kpa->valuedouble;
+            if (unit && cJSON_IsNumber(unit)) {
+                int u = unit->valueint;
+                if (u < UNIT_KPA || u > UNIT_PSI) u = UNIT_KPA;
+                cfg.channels[i].params.pressure.pressure_unit = (uint8_t)u;
+            } else {
+                cfg.channels[i].params.pressure.pressure_unit = UNIT_KPA;
+            }
         }
     }
     
@@ -536,8 +571,8 @@ esp_err_t config_export_get_handler(httpd_req_t *req) {
 
     size_t json_pos = 0;
     const size_t json_max = 4096;
-    json_pos += snprintf(json + json_pos, json_max - json_pos, "{\"can_speed_kbps\":%lu,\"can_start_id\":%lu,\"channels\":[",
-        (unsigned long)cfg.can_speed_kbps, (unsigned long)cfg.can_start_id);
+    json_pos += snprintf(json + json_pos, json_max - json_pos, "{\"version\":%u,\"can_speed_kbps\":%lu,\"can_start_id\":%lu,\"channels\":[",
+        (unsigned int)CONFIG_VERSION, (unsigned long)cfg.can_speed_kbps, (unsigned long)cfg.can_start_id);
 
     for (int i = 0; i < CONFIG_CHANNELS; ++i) {
         json_pos += snprintf(json + json_pos, json_max - json_pos,
@@ -553,11 +588,12 @@ esp_err_t config_export_get_handler(httpd_req_t *req) {
                 "\"ntc\":{\"table_id\":%u}}}", cfg.channels[i].params.ntc.table_id);
         } else if (cfg.channels[i].type == SENSOR_PRESSURE) {
             json_pos += snprintf(json + json_pos, json_max - json_pos,
-                "\"pressure\":{\"min_mv\":%u,\"max_mv\":%u,\"min_kpa\":%.2f,\"max_kpa\":%.2f}}}",
+                "\"pressure\":{\"min_mv\":%u,\"max_mv\":%u,\"min_kpa\":%.2f,\"max_kpa\":%.2f,\"pressure_unit\":%u}}}",
                 cfg.channels[i].params.pressure.min_mv,
                 cfg.channels[i].params.pressure.max_mv,
                 cfg.channels[i].params.pressure.min_kpa,
-                cfg.channels[i].params.pressure.max_kpa);
+                cfg.channels[i].params.pressure.max_kpa,
+                (unsigned int)cfg.channels[i].params.pressure.pressure_unit);
         } else {
             json_pos += snprintf(json + json_pos, json_max - json_pos, "\"raw\":{}}}");
         }
@@ -611,9 +647,9 @@ esp_err_t config_import_post_handler(httpd_req_t *req) {
         return ESP_FAIL;
     }
 
-    // Require explicit version match for imports (fresh-only imports)
+    // Require explicit version match for imports (allow previous minor version for migration)
     cJSON *ver = cJSON_GetObjectItem(root, "version");
-    if (!ver || !cJSON_IsNumber(ver) || (uint32_t)ver->valueint != CONFIG_VERSION) {
+    if (!ver || !cJSON_IsNumber(ver) || ((uint32_t)ver->valueint != CONFIG_VERSION && (uint32_t)ver->valueint != (CONFIG_VERSION - 1))) {
         ESP_LOGW(TAG, "Rejected import due to incompatible or missing version");
         cJSON_Delete(root);
         free(buf);
@@ -706,6 +742,7 @@ esp_err_t config_import_post_handler(httpd_req_t *req) {
             cJSON *max_mv = cJSON_GetObjectItem(pressure, "max_mv");
             cJSON *min_kpa = cJSON_GetObjectItem(pressure, "min_kpa");
             cJSON *max_kpa = cJSON_GetObjectItem(pressure, "max_kpa");
+            cJSON *unit = cJSON_GetObjectItem(pressure, "pressure_unit");
 
             if (!cJSON_IsNumber(min_mv) || !cJSON_IsNumber(max_mv) || 
                 !cJSON_IsNumber(min_kpa) || !cJSON_IsNumber(max_kpa)) {
@@ -719,6 +756,13 @@ esp_err_t config_import_post_handler(httpd_req_t *req) {
             cfg.channels[i].params.pressure.max_mv = (uint16_t)max_mv->valueint;
             cfg.channels[i].params.pressure.min_kpa = (float)min_kpa->valuedouble;
             cfg.channels[i].params.pressure.max_kpa = (float)max_kpa->valuedouble;
+            if (unit && cJSON_IsNumber(unit)) {
+                int u = unit->valueint;
+                if (u < UNIT_KPA || u > UNIT_PSI) u = UNIT_KPA;
+                cfg.channels[i].params.pressure.pressure_unit = (uint8_t)u;
+            } else {
+                cfg.channels[i].params.pressure.pressure_unit = UNIT_KPA;
+            }
         }
     }
 
@@ -800,6 +844,9 @@ void start_http_server(void) {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.uri_match_fn = httpd_uri_match_wildcard;
     config.max_uri_handlers = 16; // Increase from default 8 to 16 to allow more handlers
+    // Increase HTTPD task stack to avoid stack overflow in heavy handlers
+    // Default may be too small if handlers allocate buffers on the stack.
+    config.stack_size = 8192; // 8 KiB
     
     ret = httpd_start(&server, &config);
     if (ret != ESP_OK) {

@@ -1,6 +1,8 @@
 #include "ads7830.h"
 #include "i2c_master.h"
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 static const char *TAG = "ads7830";
 
@@ -13,13 +15,21 @@ bool ads7830_init(void)
         ESP_LOGE(TAG, "I2C init failed");
         return false;
     }
-    // Optionally probe devices
+    // Probe devices with a few retries to allow for slow device readiness at boot
     uint8_t tmp;
     for (int i = 0; i < 2; ++i) {
-        if (!i2c_master_write_read(device_addrs[i], NULL, 0, &tmp, 1)) {
-            ESP_LOGW(TAG, "ADS7830 at 0x%02x not responding", device_addrs[i]);
-        } else {
-            ESP_LOGI(TAG, "ADS7830 found at 0x%02x", device_addrs[i]);
+        bool found = false;
+        for (int attempt = 0; attempt < 3; ++attempt) {
+            if (i2c_master_write_read(device_addrs[i], NULL, 0, &tmp, 1)) {
+                ESP_LOGI(TAG, "ADS7830 found at 0x%02x", device_addrs[i]);
+                found = true;
+                break;
+            }
+            // small delay between retries
+            vTaskDelay(pdMS_TO_TICKS(100));
+        }
+        if (!found) {
+            ESP_LOGW(TAG, "ADS7830 at 0x%02x not responding after retries", device_addrs[i]);
         }
     }
     return true;

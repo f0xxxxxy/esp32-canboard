@@ -3,27 +3,29 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>esp32-canboard - Config</title>
+    <title>CANBoard Configuration</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 0.6em 1.2em; }
         .header-row { display:flex; align-items:center; justify-content:space-between; gap:1em; margin-bottom:0.6em; }
+        .header-row { flex-wrap: nowrap; }
         h2 { margin: 0; }
         table { border-collapse: collapse; width: 100%; margin-bottom: 2em; table-layout: fixed; }
-        th, td { border: 1px solid #ccc; padding: 0.35em 0.4em; text-align: left; }
+        th, td { border: 1px solid #ccc; padding: 0.35em 0.4em; text-align: center; }
         /* Center the Input (1st) and Pullup header (4th) */
-        th:nth-child(1), td:nth-child(1) { text-align: center; }
-        th:nth-child(4) { text-align: center; }
-        /* Center voltage/pressure headers (7-12) */
-        th:nth-child(7), th:nth-child(8), th:nth-child(9), th:nth-child(10), th:nth-child(11), th:nth-child(12) { text-align: center; }
-        td:nth-child(11) { text-align: center; }
-        /* Allow Pullup input to fill its cell but align value to the right */
-        td:nth-child(4) input { text-align: right; width: 100%; box-sizing: border-box; }
-        /* Center the Filtering column (6th) and its checkboxes */
-        th:nth-child(6), td:nth-child(6) { text-align: center; }
+        td:nth-child(1) { text-align: center; }
+        th:nth-child(2), th:nth-child(4), th:nth-child(5), th:nth-child(8), th:nth-child(9), th:nth-child(10), th:nth-child(11) { text-align: left; }
+        
+        td:nth-child(12) { text-align: center; }
+        /* Center the Filtering column (7th) and its checkboxes */
+        th:nth-child(7), td:nth-child(7) { text-align: center; }
+        td:nth-child(7) input { transform: scale(1.1); }
         td:nth-child(6) input { transform: scale(1.1); }
-        .unit-wrap { display:flex; align-items:center; justify-content:flex-start; gap:0.25em; }
-        .unit { font-size:0.9rem; color:#333; }
-        .unit-wrap input { text-align: right; }
+
+        .input-container { display: flex; width: 100%; gap: 0.35em; }
+        .input-container .input-box { flex: 1 1 auto; }
+        .input-container .unit { flex: 0 0 25px; display: flex; align-items: center; font-size:0.9rem; color:#555; }
+        .input-container .unit-ohm { flex: 0 0 10px; display: flex; align-items: center; font-size:0.9rem; color:#555; }
+        
         /* Remove numeric up/down controls for inputs where we don't want spinners */
         input.no-spin::-webkit-outer-spin-button,
         input.no-spin::-webkit-inner-spin-button {
@@ -43,9 +45,15 @@
         .action-btn.restore { background: #27ae60; color: #fff; }
         .action-btn.restore:hover { background: #229954; }
         .action-btn:disabled { background: #aaa; cursor: not-allowed; }
-        .controls-inline { display:flex; align-items:center; gap:0.75em; }
+        .controls-inline { display:flex; align-items:center; gap:0.75em; flex-wrap: nowrap; }
+        .header-controls { min-width: 0; }
         .header-controls { margin-right: 0.9em; }
-        .small-select { width:12ch; }
+        .vref-inline { display:flex; align-items:center; gap:0.25rem; margin-left:0.6em; white-space:nowrap; }
+        .small-select { max-width:12ch; width:100%; box-sizing: border-box; }
+        /* Keep header selects compact rather than expanding to fill their flex container */
+        .header-row .small-select { width:12ch; max-width:12ch; }
+        .punit-select { width:100%; box-sizing: border-box; }
+        .ntc-select { width:100%; box-sizing: border-box; }
         .hex-input { width:6ch; }
         .small-input { width:5.5ch; }
         .hex-prefix { margin-right:0.2em; }
@@ -150,8 +158,8 @@
                     <span class="hex-prefix">0x</span>
                     <input id="base-can-id" name="can_start_id" class="hex-input" maxlength="3" value="100" />
                 </div>
-                <div style="display:flex; align-items:center; gap:0.5em; margin-left:0.6em;">
-                    <span style="font-size:0.95rem; color:#333;">V5:</span>
+                <div class="vref-inline">
+                    <span style="font-size:0.95rem; color:#333;">vRef:</span>
                     <span id="v5-rail" class="unit">-- mV</span>
                 </div>
                 <!-- vRef is measured live; pullup_vref field removed -->
@@ -165,18 +173,19 @@
     </div>
     <table>
         <colgroup>
-            <col style="width:5%">    <!-- Channel -->
+            <col style="width:60px">    <!-- Channel -->
             <col>                     <!-- Name (flexible) -->
-            <col style="width:8%">    <!-- Sensor Type -->
+            <col style="width:7%">    <!-- Sensor Type -->
             <col style="width:6%">    <!-- Pullup -->
-            <col style="width:14%">    <!-- NTC Table -->
+            <col style="width:11%">    <!-- NTC Table -->
+            <col style="width:5%">     <!-- Unit -->
             <col style="width:6%">    <!-- Filtering -->
             <col style="width:8%">    <!-- Pressure Min mV -->
             <col style="width:8%">    <!-- Pressure Max mV -->
             <col style="width:8%">    <!-- Pressure Min kPa -->
             <col style="width:8%">    <!-- Pressure Max kPa -->
             <col style="width:7%">    <!-- Voltage -->
-            <col style="width:8%">    <!-- Value -->
+            <col style="width:7%">    <!-- Value -->
         </colgroup>
             <thead>
                 <tr>
@@ -185,6 +194,7 @@
                     <th>Sensor Type</th>
                     <th>Pullup</th>
                     <th>NTC Table</th>
+                    <th>Unit</th>
                     <th>Filtering</th>
                     <th>Voltage Min</th>
                     <th>Voltage Max</th>
@@ -264,20 +274,52 @@
             <td><select name="type${idx}">
                 ${SENSOR_TYPES.map((t,i)=>`<option value="${i}"${ch.type==i?' selected':''}>${t}</option>`).join('')}
             </select></td>
-            <td><div class="unit-wrap"><input name="pullup${idx}" class="no-spin" type="number" min="0" max="100000" value="${ch.pullup_ohms || 0}" ${isNTC ? '' : 'disabled'}><span class="unit">Ω</span></div></td>
-            <td><select name="ntc${idx}" ${isNTC ? '' : 'disabled'}>
+            <td>
+                <div class="input-container">
+                    <div class="input-box"><input name="pullup${idx}" class="no-spin" type="number" min="0" max="100000" value="${ch.pullup_ohms || 0}" ${isNTC ? '' : 'disabled'}></div>
+                    <div class="unit-ohm">Ω</div>
+                </div>
+            </td>
+            <td><select name="ntc${idx}" class="ntc-select" ${isNTC ? '' : 'disabled'}>
                 ${NTC_TABLES.map((t,i)=>`<option value="${i}"${ch.params?.ntc?.table_id==i?' selected':''}>${t}</option>`).join('')}
             </select></td>
+            <td><select name="punit${idx}" class="punit-select" ${isPressure ? '' : 'disabled'}>
+                    <option value="0"${(ch.params && ch.params.pressure && typeof ch.params.pressure.pressure_unit !== 'undefined' && ch.params.pressure.pressure_unit==0)?' selected':''}>kPa</option>
+                    <option value="1"${(ch.params && ch.params.pressure && typeof ch.params.pressure.pressure_unit !== 'undefined' && ch.params.pressure.pressure_unit==1)?' selected':''}>bar</option>
+                    <option value="2"${(ch.params && ch.params.pressure && typeof ch.params.pressure.pressure_unit !== 'undefined' && ch.params.pressure.pressure_unit==2)?' selected':''}>psi</option>
+                </select></td>
             <td><select name="filtering${idx}" ${isPressure ? '' : 'disabled'}>
                     <option value="0"${ch.filtering==0?' selected':''}>None</option>
                     <option value="1"${ch.filtering==1?' selected':''}>Low</option>
                     <option value="2"${ch.filtering==2?' selected':''}>Medium</option>
                     <option value="3"${ch.filtering==3?' selected':''}>High</option>
                 </select></td>
-            <td><div class="unit-wrap"><input name="pminmv${idx}" class="no-spin" type="number" min="0" max="5000" value="${(ch.params && ch.params.pressure && typeof ch.params.pressure.min_mv !== 'undefined') ? ch.params.pressure.min_mv : ''}" ${isPressure ? '' : 'disabled'}><span class="unit">mV</span></div></td>
-            <td><div class="unit-wrap"><input name="pmaxmv${idx}" class="no-spin" type="number" min="0" max="5000" value="${(ch.params && ch.params.pressure && typeof ch.params.pressure.max_mv !== 'undefined') ? ch.params.pressure.max_mv : ''}" ${isPressure ? '' : 'disabled'}><span class="unit">mV</span></div></td>
-            <td><div class="unit-wrap"><input name="pminkpa${idx}" class="no-spin" type="number" step="0.01" value="${(ch.params && ch.params.pressure && typeof ch.params.pressure.min_kpa !== 'undefined') ? ch.params.pressure.min_kpa : ''}" ${isPressure ? '' : 'disabled'}><span class="unit">kPa</span></div></td>
-            <td><div class="unit-wrap"><input name="pmaxkpa${idx}" class="no-spin" type="number" step="0.01" value="${(ch.params && ch.params.pressure && typeof ch.params.pressure.max_kpa !== 'undefined') ? ch.params.pressure.max_kpa : ''}" ${isPressure ? '' : 'disabled'}><span class="unit">kPa</span></div></td>
+            <td>
+                <div class="input-container">
+                    <div class="input-box">
+                        <input name="pminmv${idx}" class="no-spin" type="number" min="0" max="5000" value="${(ch.params && ch.params.pressure && typeof ch.params.pressure.min_mv !== 'undefined') ? ch.params.pressure.min_mv : ''}" ${isPressure ? '' : 'disabled'}>
+                    </div>
+                    <div class="unit">mV</div>
+                </div>
+            </td>
+            <td>
+                <div class="input-container">
+                    <div class="input-box"><input name="pmaxmv${idx}" class="no-spin" type="number" min="0" max="5000" value="${(ch.params && ch.params.pressure && typeof ch.params.pressure.max_mv !== 'undefined') ? ch.params.pressure.max_mv : ''}" ${isPressure ? '' : 'disabled'}></div>
+                    <div class="unit">mV</div>
+                </div>
+            </td>
+            <td>
+                <div class="input-container">
+                    <div class="input-box"><input name="pminkpa${idx}" class="no-spin" type="number" step="0.01" value="${(ch.params && ch.params.pressure && typeof ch.params.pressure.min_kpa !== 'undefined') ? ch.params.pressure.min_kpa : ''}" ${isPressure ? '' : 'disabled'}></div>
+                    <div class="unit">kPa</div>
+                </div>
+            </td>
+            <td>
+                <div class="input-container">
+                    <div class="input-box"><input name="pmaxkpa${idx}" class="no-spin" type="number" step="0.01" value="${(ch.params && ch.params.pressure && typeof ch.params.pressure.max_kpa !== 'undefined') ? ch.params.pressure.max_kpa : ''}" ${isPressure ? '' : 'disabled'}></div>
+                    <div class="unit">kPa</div>
+                </div>
+            </td>
             <td><span id="live-voltage-${idx}">--</span></td>
             <td><span id="live-value-${idx}"></span></td>
         </tr>`;
@@ -285,25 +327,43 @@
 
     function validateConfig(form) {
         let error = "";
+        function getFormElem(name) {
+            let el = form[name];
+            if (!el) return null;
+            if (typeof el.value === 'undefined' && el.length) el = el[0];
+            return el;
+        }
         for (let i = 0; i < 16; ++i) {
-            const name = form[`name${i}`].value.trim();
+            const nameEl = getFormElem(`name${i}`);
+            const name = nameEl ? nameEl.value.trim() : '';
             if (!name) error += `Channel ${i+1}: Name required. `;
-            const pullup = parseInt(form[`pullup${i}`].value);
+            const pullupEl = getFormElem(`pullup${i}`);
+            const pullup = pullupEl ? parseInt(pullupEl.value) : NaN;
             if (isNaN(pullup) || pullup < 0 || pullup > 100000) error += `Channel ${i+1}: Pullup invalid. `;
-            const type = parseInt(form[`type${i}`].value);
+            const typeEl = getFormElem(`type${i}`);
+            const type = typeEl ? parseInt(typeEl.value) : 0;
             if (type === 1) { // NTC
-                if (isNaN(parseInt(form[`ntc${i}`].value))) error += `Channel ${i+1}: NTC table invalid. `;
+                const ntcEl = getFormElem(`ntc${i}`);
+                if (!ntcEl || isNaN(parseInt(ntcEl.value))) error += `Channel ${i+1}: NTC table invalid. `;
             }
             if (type === 2) { // Pressure
-                const minmv = parseInt(form[`pminmv${i}`].value);
-                const maxmv = parseInt(form[`pmaxmv${i}`].value);
-                const minkpa = parseFloat(form[`pminkpa${i}`].value);
-                const maxkpa = parseFloat(form[`pmaxkpa${i}`].value);
+                const minmvEl = getFormElem(`pminmv${i}`);
+                const maxmvEl = getFormElem(`pmaxmv${i}`);
+                const minkpaEl = getFormElem(`pminkpa${i}`);
+                const maxkpaEl = getFormElem(`pmaxkpa${i}`);
+                const unitEl = getFormElem(`punit${i}`);
+                const minmv = minmvEl ? parseInt(minmvEl.value) : NaN;
+                const maxmv = maxmvEl ? parseInt(maxmvEl.value) : NaN;
+                const minkpa = minkpaEl ? parseFloat(minkpaEl.value) : NaN;
+                const maxkpa = maxkpaEl ? parseFloat(maxkpaEl.value) : NaN;
+                const unit = unitEl ? parseInt(unitEl.value) : NaN;
                 if (isNaN(minmv) || isNaN(maxmv) || minmv >= maxmv) error += `Channel ${i+1}: Pressure mV min/max invalid. `;
                 if (minmv < 0 || minmv > 5000 || maxmv < 0 || maxmv > 5000) error += `Channel ${i+1}: Pressure mV must be 0-5000. `;
                 if (isNaN(minkpa) || isNaN(maxkpa) || minkpa >= maxkpa) error += `Channel ${i+1}: Pressure kPa min/max invalid. `;
-                const lvl = parseInt(form[`filtering${i}`].value);
+                const lvlEl = getFormElem(`filtering${i}`);
+                const lvl = lvlEl ? parseInt(lvlEl.value) : NaN;
                 if (isNaN(lvl) || lvl < 0 || lvl > 3) error += `Channel ${i+1}: Filter level invalid. `;
+                if (isNaN(unit) || unit < 0 || unit > 2) error += `Channel ${i+1}: Pressure unit invalid. `;
             }
         }
         return error;
@@ -328,13 +388,16 @@
         const kmin = document.querySelector(`[name="pminkpa${i}"]`);
         const kmax = document.querySelector(`[name="pmaxkpa${i}"]`);
         const filt = document.querySelector(`[name="filtering${i}"]`);
+        const punit = document.querySelector(`[name="punit${i}"]`);
         if (ntc) ntc.disabled = !isNTC;
         if (pullup) pullup.disabled = !isNTC;
         if (pmin) pmin.disabled = !isPressure;
         if (pmax) pmax.disabled = !isPressure;
         if (kmin) kmin.disabled = !isPressure;
         if (kmax) kmax.disabled = !isPressure;
+        if (punit) punit.disabled = !isPressure;
         if (filt) filt.disabled = !isPressure;
+        updateUnitLabel(i);
     }
 
     function attachTypeHandlers() {
@@ -343,7 +406,40 @@
             if (!sel) continue;
             sel.onchange = () => updateRowControls(i);
             updateRowControls(i);
+            const punitSel = document.querySelector(`[name="punit${i}"]`);
+            if (punitSel) {
+                punitSel.onchange = () => updateUnitLabel(i);
+            }
+            updateUnitLabel(i);
         }
+    }
+
+    function unitTextFromIndex(u) {
+        return ['kPa', 'bar', 'psi'][u] || 'kPa';
+    }
+
+    function updateUnitLabel(i) {
+        const punitSel = document.querySelector(`[name="punit${i}"]`);
+        let text = 'kPa';
+        if (punitSel && !punitSel.disabled) {
+            const v = parseInt(punitSel.value);
+            if (!isNaN(v)) text = unitTextFromIndex(v);
+        }
+
+        function findUnitSpanForInput(inputEl) {
+            if (!inputEl) return null;
+            // prefer new wrapper class, fallback to old
+            let container = inputEl.closest('.input-container') || inputEl.closest('.unit-wrap') || inputEl.parentElement;
+            if (!container) return null;
+            return container.querySelector('.unit');
+        }
+
+        const kminInput = document.querySelector(`[name="pminkpa${i}"]`);
+        const kmaxInput = document.querySelector(`[name="pmaxkpa${i}"]`);
+        const kminSpan = findUnitSpanForInput(kminInput);
+        const kmaxSpan = findUnitSpanForInput(kmaxInput);
+        if (kminSpan) kminSpan.textContent = text;
+        if (kmaxSpan) kmaxSpan.textContent = text;
     }
 
     async function loadConfig() {
@@ -404,8 +500,7 @@
         e.preventDefault();
         const form = e.target;
         const error = validateConfig(form);
-        setStatus(error, true);
-        if (error) return;
+        if (error) { setStatus(error, true); return; }
         // Build config object
         config.can_speed_kbps = parseInt(document.getElementById('can-speed').value);
         // Read base CAN ID from hex input (allow decimal as fallback)
@@ -418,28 +513,54 @@
             const dec = parseInt(baseVal);
             config.can_start_id = isNaN(dec) ? (config.can_start_id || 0x100) : dec;
         }
+        function getFormElem(name) {
+            let el = form[name];
+            if (!el) return null;
+            if (typeof el.value === 'undefined' && el.length) el = el[0];
+            return el;
+        }
         for (let i = 0; i < 16; ++i) {
-            config.channels[i].name = form[`name${i}`].value.trim();
-            config.channels[i].pullup_ohms = parseInt(form[`pullup${i}`].value);
-            config.channels[i].type = parseInt(form[`type${i}`].value);
-            config.channels[i].filtering = parseInt(form[`filtering${i}`].value);
+            const nameEl = getFormElem(`name${i}`);
+            const pullupEl = getFormElem(`pullup${i}`);
+            const typeEl = getFormElem(`type${i}`);
+            const filtEl = getFormElem(`filtering${i}`);
+            config.channels[i].name = nameEl ? nameEl.value.trim() : '';
+            config.channels[i].pullup_ohms = pullupEl ? parseInt(pullupEl.value) : 0;
+            config.channels[i].type = typeEl ? parseInt(typeEl.value) : 0;
+            config.channels[i].filtering = filtEl ? parseInt(filtEl.value) : 0;
             config.channels[i].params = {};
             if (config.channels[i].type === 1) {
-                config.channels[i].params.ntc = { table_id: parseInt(form[`ntc${i}`].value) };
+                const ntcEl = getFormElem(`ntc${i}`);
+                config.channels[i].params.ntc = { table_id: ntcEl ? parseInt(ntcEl.value) : 0 };
             } else if (config.channels[i].type === 2) {
+                const minmvEl = getFormElem(`pminmv${i}`);
+                const maxmvEl = getFormElem(`pmaxmv${i}`);
+                const minkpaEl = getFormElem(`pminkpa${i}`);
+                const maxkpaEl = getFormElem(`pmaxkpa${i}`);
+                const punitEl = getFormElem(`punit${i}`);
                 config.channels[i].params.pressure = {
-                    min_mv: parseInt(form[`pminmv${i}`].value),
-                    max_mv: parseInt(form[`pmaxmv${i}`].value),
-                    min_kpa: parseFloat(form[`pminkpa${i}`].value),
-                    max_kpa: parseFloat(form[`pmaxkpa${i}`].value)
+                    min_mv: minmvEl ? parseInt(minmvEl.value) : 0,
+                    max_mv: maxmvEl ? parseInt(maxmvEl.value) : 0,
+                    min_kpa: minkpaEl ? parseFloat(minkpaEl.value) : 0.0,
+                    max_kpa: maxkpaEl ? parseFloat(maxkpaEl.value) : 0.0,
+                    pressure_unit: punitEl ? parseInt(punitEl.value) : 0
                 };
             }
         }
         try {
+            let payload = null;
+            try {
+                payload = JSON.stringify(config);
+            } catch (jerr) {
+                console.error('Failed to serialize config', jerr, config);
+                setStatus('Failed to serialize config', true);
+                return;
+            }
+            console.log('Posting config payload:', payload);
             const resp = await fetch('/api/config', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(config)
+                body: payload
             });
             if (resp.ok) {
                 setStatus('Config saved.', false, true);

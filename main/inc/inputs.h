@@ -14,10 +14,16 @@
 /* New hardware: two ADS7830 providing 16 analog inputs (logical indices 0..15) */
 #define NUM_ANALOG_INPUTS 16
 
-/* ADC channels used internally on ESP32 for monitoring rails */
-#define V5_REF_ADC_CHANNEL ADC_CHANNEL_9
-#define USB_ADC_CHANNEL ADC_CHANNEL_2
-#define EXT_VOLT_ADC_CHANNEL ADC_CHANNEL_3
+#/* ADC channels used internally on ESP32 for monitoring rails */
+// Hardware mapping for ESP32-S3-WROOM-1
+// GPIO3  = ADC1_CH2 -> 5V regulated monitoring (V5 reference)
+// GPIO9  = ADC1_CH8 -> External voltage monitoring
+// GPIO38 = digital USB presence (not an ADC channel)
+#define V5_REF_ADC_CHANNEL ADC_CHANNEL_2
+// USB_ADC_CHANNEL previously used ADC but GPIO38 is not ADC-capable on this package.
+// Leave defined for compatibility but do not use for ADC reads.
+#define USB_ADC_CHANNEL ADC_CHANNEL_2 /* deprecated - GPIO38 is digital */
+#define EXT_VOLT_ADC_CHANNEL ADC_CHANNEL_8
 
 /* Median filter sample depths for selectable levels */
 #define FILTER_DEPTH_LOW 5                         ///< Samples for "low" filter level

@@ -6,7 +6,14 @@
 
 #define CONFIG_CHANNELS 16       ///< Number of ADC input channels
 #define CONFIG_NAME_LEN 32      ///< Maximum characters for channel name
-#define CONFIG_VERSION 4        ///< Configuration structure version number (increment for new fields or layout changes)
+#define CONFIG_VERSION 5        ///< Configuration structure version number (increment for new fields or layout changes)
+
+/// Pressure units selectable in UI and stored per-channel
+typedef enum {
+    UNIT_KPA = 0,
+    UNIT_BAR = 1,
+    UNIT_PSI = 2
+} pressure_unit_t;
 
 /// Per-channel median filter strength levels
 /// stored in the 8‑bit `filtering` field below.
@@ -40,6 +47,7 @@ typedef struct {
             uint16_t max_mv;    ///< Maximum voltage in millivolts
             float min_kpa;      ///< Minimum pressure in kilopascals
             float max_kpa;      ///< Maximum pressure in kilopascals
+            uint8_t pressure_unit; ///< Unit enum (pressure_unit_t)
         } pressure;
         struct { ///< Raw voltage measurement (no conversion)
         } raw;

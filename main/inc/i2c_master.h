@@ -1,6 +1,5 @@
-void i2c_master_scan(void);
-// Minimal I2C master helper (stub)
 #pragma once
+// Minimal I2C master helper (stub)
 #include <stdint.h>
 #include <stdbool.h>
 #include "driver/gpio.h"

@@ -148,6 +148,12 @@ bool config_load(board_config_t *cfg) {
                 }
             }
         }
+        // If upgrading to version 5, ensure pressure unit field is initialized
+        if (cfg->version < 5) {
+            for (int i = 0; i < CONFIG_CHANNELS; ++i) {
+                cfg->channels[i].params.pressure.pressure_unit = UNIT_KPA;
+            }
+        }
         cfg->version = CONFIG_VERSION;
         // update CRC and persist new layout immediately
         cfg->crc32 = crc32(cfg, offsetof(board_config_t, crc32));
@@ -197,6 +203,7 @@ void config_set_defaults(board_config_t *cfg) {
         cfg->channels[i].pullup_ohms = 0;
         cfg->channels[i].type = SENSOR_RAW;
         cfg->channels[i].filtering = FILTER_NONE; // No filtering by default
+        cfg->channels[i].params.pressure.pressure_unit = UNIT_KPA;
     }
     
     ESP_LOGI(TAG, "Default config set");
