@@ -6,7 +6,7 @@
 * 2x 5V Outputs - Fused at 500mA (Thermal Reset)
 * USB-C for programming, with JTAG support for debugging
 * ESD Protection on both USB and CAN
-* TE Connectivity AMP 26 Way SuperSeal Connector (PCB Socket: 9-6437287-8, Cable Plug: 3-1437290-7)
+* TE Connectivity AMP 26 Way Superseal Connector (PCB Socket: 9-6437287-8, Cable Plug: 3-1437290-7)
 * Optional pull-up resistors via fused 5V rail for each input (TH 6.3mm)
 * Configuration via web interface over WiFi
 * Optional per-channel median filtering with selectable strength (none/low/med/high) to reduce noise
@@ -64,7 +64,7 @@ Encoding rules for dynamic values (one per input):
 | Type | Encoding |
 |:---|:---|
 | Raw | uint16 = 0 (no dynamic output; use analog voltage frame) |
-| Pressure | uint16 = pressure_kPa * 100 (resolution 0.01 kPa) |
+| Pressure | uint16 = pressure * 100 (resolution 0.01 [bar, psi, kPa]) |
 | NTC | signed int16 = temperature_C (°C as integer) stored in uint16 (least-significant 16 bits) |
 
 Receivers should interpret all measurement values as little-endian uint16s unless noted. Dynamic outputs use live V5 for conversions where applicable.
