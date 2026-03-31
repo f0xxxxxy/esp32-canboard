@@ -3,7 +3,7 @@
 * MCP2562T CAN Transceiver (up to 1Mbps)
 * 16x 5V-tolerant Inputs via two ADS7830 I2C expanders (16 analog channels)
 * Internal 5V rail reference for accurate output calculation
-* 2x 5V Outputs - Fused at 500mA (Thermal Reset)
+* 3x 5V Output Pins - Fused at 500mA (Thermal Reset)
 * USB-C for programming, with JTAG support for debugging
 * ESD Protection on both USB and CAN
 * TE Connectivity AMP 26 Way Superseal Connector (PCB Socket: 9-6437287-8, Cable Plug: 3-1437290-7)
