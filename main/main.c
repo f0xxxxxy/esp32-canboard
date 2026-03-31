@@ -14,7 +14,7 @@
 #include "esp_log.h"
 #include "esp_system.h"
 #include "driver/gpio.h"
-#include "driver/twai.h"
+#include "esp_twai.h"
 
 #define USB_PRESENCE_DETECT GPIO_NUM_38
 

@@ -7,7 +7,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "esp_log.h"
-#include "driver/twai.h"
+#include "esp_twai.h"
 #include "inc/config.h"
 #include "inc/can.h"
 #include "inc/inputs.h"

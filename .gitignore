@@ -6,3 +6,4 @@ sdkconfig.ci
 skdconfig.defaults
 sdkconfig.old
 .devcontainer/*
+managed_components/*

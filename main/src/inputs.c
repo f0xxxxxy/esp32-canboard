@@ -132,7 +132,7 @@ void initAdcChannels(void){
     adc_channel_t monitor_chs[] = { V5_REF_ADC_CHANNEL, EXT_VOLT_ADC_CHANNEL };
     for (size_t i = 0; i < sizeof(monitor_chs)/sizeof(monitor_chs[0]); ++i) {
         adc_channel_t ch = monitor_chs[i];
-        adc_oneshot_chan_cfg_t chan_cfg = { .bitwidth = ADC_BITWIDTH_DEFAULT, .atten = ADC_ATTEN_DB_11 };
+        adc_oneshot_chan_cfg_t chan_cfg = { .bitwidth = ADC_BITWIDTH_DEFAULT, .atten = ADC_ATTEN_DB_12 };
         esp_err_t err = adc_oneshot_config_channel(adc_handle, ch, &chan_cfg);
         if (err != ESP_OK) {
             ESP_LOGW(adc_log, "Failed to Configure ADC Channel: %d (%s)", ch, esp_err_to_name(err));
@@ -141,7 +141,7 @@ void initAdcChannels(void){
             ESP_LOGI(adc_log, "Configured Monitor ADC Channel: %d", ch);
         }
 
-        adc_cali_curve_fitting_config_t cali_cfg = { .unit_id = ADC_UNIT, .atten = ADC_ATTEN_DB_11, .bitwidth = ADC_BITWIDTH_DEFAULT };
+        adc_cali_curve_fitting_config_t cali_cfg = { .unit_id = ADC_UNIT, .atten = ADC_ATTEN_DB_12, .bitwidth = ADC_BITWIDTH_DEFAULT };
         adc_cali_handle_t cali_handle = NULL;
         esp_err_t ret = adc_cali_create_scheme_curve_fitting(&cali_cfg, &cali_handle);
         if (ret == ESP_OK) {

@@ -7,7 +7,7 @@
 #define DRIVECAN_RX_GPIO_NUM       GPIO_NUM_10
 
 /* Default CAN base ID (can be overridden via board config) */
-#define CAN_BASEID 0x620
+#define CAN_BASEID 0x10
 
 /// TWAI driver handle for CAN bus communication
 extern twai_handle_t twai_can;
