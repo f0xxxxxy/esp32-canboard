@@ -494,12 +494,22 @@ esp_err_t live_values_get_handler(httpd_req_t *req) {
                 board_cfg.channels[i].params.pressure.min_kpa,
                 board_cfg.channels[i].params.pressure.max_kpa);
             float pressure_kpa = (float)pressure_x100 / 100.0f;
+            float pressure_display = pressure_kpa;
+            const char *pressure_unit = "kPa";
+            uint8_t unit = board_cfg.channels[i].params.pressure.pressure_unit;
+            if (unit == UNIT_BAR) {
+                pressure_display = pressure_kpa / 100.0f;
+                pressure_unit = "bar";
+            } else if (unit == UNIT_PSI) {
+                pressure_display = pressure_kpa / 6.89476f;
+                pressure_unit = "psi";
+            }
             json_pos += snprintf(json + json_pos, json_max - json_pos,
-                "%s{\"voltage_v\":%.2f,\"value\":\"%.2f kPa\"}",
-                i ? "," : "", voltage_v, pressure_kpa);
+                "%s{\"voltage_v\":%.2f,\"value\":\"%.2f %s\"}",
+                i ? "," : "", voltage_v, pressure_display, pressure_unit);
         } else if (board_cfg.channels[i].type == SENSOR_NTC) {
             const ntc_table_def_t *table = ntc_get_table(board_cfg.channels[i].params.ntc.table_id);
-            int8_t temp_c = getSensorTemperature(
+            int16_t temp_c = getSensorTemperature(
                 voltages_copy[i],
                 board_cfg.channels[i].pullup_ohms,
                 get_v5_rail_mv(),
@@ -516,18 +526,18 @@ esp_err_t live_values_get_handler(httpd_req_t *req) {
                 r_ntc = (int32_t)(r_ntc_f + 0.5f);
             }
 
-            if (temp_c == (int8_t)-128) {
+            if (temp_c == (int16_t)-128) {
                 json_pos += snprintf(json + json_pos, json_max - json_pos,
                     "%s{\"voltage_v\":%.2f,\"value\":\"\"}",
                     i ? "," : "", voltage_v);
             } else {
                 if (r_ntc >= 0) {
                     json_pos += snprintf(json + json_pos, json_max - json_pos,
-                        "%s{\"voltage_v\":%.2f,\"value\":\"%d \xC2\xB0C (%ld \xCE\xA9)\"}",
+                        "%s{\"voltage_v\":%.2f,\"value\":\"%d C (%ld ohm)\"}",
                         i ? "," : "", voltage_v, (int)temp_c, (long)r_ntc);
                 } else {
                     json_pos += snprintf(json + json_pos, json_max - json_pos,
-                        "%s{\"voltage_v\":%.2f,\"value\":\"%d \xC2\xB0C\"}",
+                        "%s{\"voltage_v\":%.2f,\"value\":\"%d C\"}",
                         i ? "," : "", voltage_v, (int)temp_c);
                 }
             }

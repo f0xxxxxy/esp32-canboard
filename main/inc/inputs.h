@@ -20,10 +20,11 @@
 // GPIO9  = ADC1_CH8 -> External voltage monitoring
 // GPIO38 = digital USB presence (not an ADC channel)
 #define V5_REF_ADC_CHANNEL ADC_CHANNEL_2
-// USB_ADC_CHANNEL previously used ADC but GPIO38 is not ADC-capable on this package.
-// Leave defined for compatibility but do not use for ADC reads.
-#define USB_ADC_CHANNEL ADC_CHANNEL_2 /* deprecated - GPIO38 is digital */
 #define EXT_VOLT_ADC_CHANNEL ADC_CHANNEL_8
+// Per-board gain correction from measured midpoint (DMM) vs ADC-converted midpoint.
+#define V5_REF_CORRECTION_FACTOR 1.0264f
+// ADS7830 conversion full-scale in mV (device referenced to 3.3V).
+#define ADS7830_REF_MV 3300.0f
 
 /* Median filter sample depths for selectable levels */
 #define FILTER_DEPTH_LOW 5                         ///< Samples for "low" filter level
@@ -88,7 +89,7 @@ uint16_t get_external_voltage_mv(void);
 /// @param table NTC lookup table points array
 /// @param table_size Number of points in lookup table
 /// @return Temperature in °C, or -128 on error
-int8_t getSensorTemperature(int v_mv, int r_pullup, int v_ref_mv, const ntc_point_t *table, size_t table_size);
+int16_t getSensorTemperature(int v_mv, int r_pullup, int v_ref_mv, const ntc_point_t *table, size_t table_size);
 
 /// @brief Convert voltage reading to pressure using linear scaling
 /// @param v_mv Measured voltage in millivolts

@@ -459,10 +459,22 @@
 
     async function refreshLiveValues() {
         try {
-            const res = await fetch('/api/inputs', { cache: 'no-store' });
-            if (!res.ok) return;
-            const live = await res.json();
+            const inputsRes = await fetch('/api/inputs', { cache: 'no-store' });
+            if (!inputsRes.ok) return;
+
+            const live = await inputsRes.json();
             if (!live || !Array.isArray(live.channels)) return;
+
+            let computed = null;
+            try {
+                const valuesRes = await fetch('/api/live_values', { cache: 'no-store' });
+                if (valuesRes.ok) {
+                    computed = await valuesRes.json();
+                }
+            } catch (e) {
+                // Keep showing vRef/voltages even if computed-value endpoint fails.
+                computed = null;
+            }
 
             const v5elem = document.getElementById('v5-rail');
             if (v5elem) {
@@ -488,7 +500,12 @@
                 }
 
                 if (valueEl) {
-                    valueEl.textContent = '';
+                    const cv = computed && Array.isArray(computed.channels) ? computed.channels[i] : null;
+                    if (cv && typeof cv.value === 'string') {
+                        valueEl.textContent = cv.value;
+                    } else {
+                        valueEl.textContent = '';
+                    }
                 }
             }
         } catch (e) {

@@ -138,9 +138,9 @@ void canTransmit(void *arg)
                 dyn[i] = out_val;
             } else if (board_cfg.channels[i].type == SENSOR_NTC) {
                 const ntc_table_def_t *t = ntc_get_table(board_cfg.channels[i].params.ntc.table_id);
-                int8_t temp = getSensorTemperature(voltages_copy[i], board_cfg.channels[i].pullup_ohms, get_v5_rail_mv(),
+                int16_t temp = getSensorTemperature(voltages_copy[i], board_cfg.channels[i].pullup_ohms, get_v5_rail_mv(),
                                                    t ? t->points : NULL, t ? t->points_count : 0);
-                if (temp == (int8_t)-128) temp = 0;
+                if (temp == (int16_t)-128) temp = 0;
                 dyn[i] = (uint16_t)((int16_t)temp);
             } else {
                 dyn[i] = 0;

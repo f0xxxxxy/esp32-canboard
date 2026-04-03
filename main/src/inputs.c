@@ -75,9 +75,10 @@ static bool read_analog_raw_ex(int index, uint16_t *out_mv, uint8_t *out_raw_cod
         v5 = 5000;
     }
 
-    // Keep conversion referenced to measured V5 rail to track supply variation.
-    float vadc_mv = ((float)raw / 255.0f) * (float)v5;
-    float vin_mv = vadc_mv;
+    // Convert ADS code to node voltage using ADS full-scale (3.3V), then
+    // reconstruct pre-divider input voltage using fixed 5.1k/10k ratio.
+    float vadc_mv = ((float)raw / 255.0f) * ADS7830_REF_MV;
+    float vin_mv = vadc_mv * ((float)DIVIDER_TOTAL_OHM / (float)DIVIDER_LOW_OHM);
 
     // Keep outputs within physically valid range for this ADC path.
     if (vin_mv < 0.0f) vin_mv = 0.0f;
@@ -241,6 +242,10 @@ uint16_t get_external_voltage_mv(void)
  */
 uint16_t getSensorPressure(int v_mv, int v_min_mv, int v_max_mv, float p_min, float p_max)
 {
+    if (v_mv <= 0) {
+        return 0;
+    }
+
     if (v_mv < v_min_mv) v_mv = v_min_mv;
     if (v_mv > v_max_mv) v_mv = v_max_mv;
 
@@ -274,9 +279,16 @@ uint16_t getSensorPressure(int v_mv, int v_min_mv, int v_max_mv, float p_min, fl
  *       Performs linear interpolation between table points.
  *       Input validation: v_mv must be in (0, v_ref_mv), r_pullup > 0, table != NULL
  */
-int8_t getSensorTemperature(int v_mv, int r_pullup, int v_ref_mv, const ntc_point_t *table, size_t table_size) {
-    if (v_mv <= 0 || v_mv >= v_ref_mv || r_pullup <= 0 || v_ref_mv <= 0 || table == NULL || table_size < 2)
-        return (int8_t)-128;
+int16_t getSensorTemperature(int v_mv, int r_pullup, int v_ref_mv, const ntc_point_t *table, size_t table_size) {
+    if (r_pullup <= 0 || v_ref_mv <= 0 || table == NULL || table_size < 2)
+        return (int16_t)-128;
+
+    if (v_mv <= 0)
+        return (int16_t)-128;
+
+    // Open-circuit NTC (node at/above Vref) should map to table maximum endpoint.
+    if (v_mv >= v_ref_mv)
+        return (int16_t)table[table_size - 1].temp_c;
 
     float v_ntc = v_mv / 1000.0f;
     float v_ref = v_ref_mv / 1000.0f;
@@ -296,12 +308,12 @@ int8_t getSensorTemperature(int v_mv, int r_pullup, int v_ref_mv, const ntc_poin
             int16_t t2 = table[i + 1].temp_c;
 
             float frac = (float)(r_ntc - r2) / (r1 - r2);
-            int8_t temp = (int8_t)(t2 + frac * (t1 - t2));
+            int16_t temp = (int16_t)(t2 + frac * (t1 - t2));
             return temp;
         }
     }
 
-    return (int8_t)-128;
+    return (int16_t)-128;
 }
 
 /**
@@ -418,12 +430,6 @@ void adcProcess(void *arg) {
     ESP_LOGI(adc_log, "ADC Processing Task Started");
     // allocate buffer using maximum possible depth
     uint16_t samples[FILTER_DEPTH_MAX];
-    uint16_t debug_raw_mv[NUM_ANALOG_INPUTS] = {0};
-    uint16_t debug_filtered_mv[NUM_ANALOG_INPUTS] = {0};
-    uint8_t debug_raw_code[NUM_ANALOG_INPUTS] = {0};
-    uint8_t debug_cmd[NUM_ANALOG_INPUTS] = {0};
-    uint8_t debug_addr[NUM_ANALOG_INPUTS] = {0};
-    TickType_t last_debug_log = 0;
     
     while (1) {
         for (int ch = 0; ch < NUM_ANALOG_INPUTS; ch++) {
@@ -433,52 +439,24 @@ void adcProcess(void *arg) {
 
             bool sample_valid = true;
             for (int i = 0; i < depth; ++i) {
-                uint8_t raw_code = 0;
-                uint8_t cmd = 0;
-                uint8_t addr = 0;
-                if (!read_analog_raw_ex(ch, &samples[i], &raw_code, &cmd, &addr) || samples[i] == 0) {
+                if (!read_analog_raw(ch, &samples[i]) || samples[i] == 0) {
                     sample_valid = false;
-                }
-                if (i == 0) {
-                    debug_raw_code[ch] = raw_code;
-                    debug_cmd[ch] = cmd;
-                    debug_addr[ch] = addr;
                 }
                 vTaskDelay(pdMS_TO_TICKS(2));
             }
-            debug_raw_mv[ch] = samples[0];
 
             if (sample_valid) {
                 uint16_t filtered = medianFilterHelper(samples, depth);
-                debug_filtered_mv[ch] = filtered;
                 if (xSemaphoreTake(filtered_voltages_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
                     filtered_voltages[ch] = filtered;
                     xSemaphoreGive(filtered_voltages_mutex);
                 }
             } else {
-                debug_filtered_mv[ch] = 0;
                 if (xSemaphoreTake(filtered_voltages_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
                     filtered_voltages[ch] = 0;
                     xSemaphoreGive(filtered_voltages_mutex);
                 }
             }
-        }
-
-        TickType_t now = xTaskGetTickCount();
-        if ((now - last_debug_log) >= pdMS_TO_TICKS(1000)) {
-            for (int ch = 0; ch < NUM_ANALOG_INPUTS; ++ch) {
-                ESP_LOGI(adc_log,
-                         "CH%02d dev=%d loc=%d addr=0x%02X cmd=0x%02X raw=%u raw_mv=%u filtered_mv=%u",
-                         ch + 1,
-                         ch / 8,
-                         ch % 8,
-                         debug_addr[ch],
-                         debug_cmd[ch],
-                         debug_raw_code[ch],
-                         debug_raw_mv[ch],
-                         debug_filtered_mv[ch]);
-            }
-            last_debug_log = now;
         }
 
         vTaskDelay(pdMS_TO_TICKS(10));
@@ -506,6 +484,6 @@ uint16_t get_v5_rail_mv(void)
     uint16_t measured_mv = getScaledMillivolts(V5_REF_ADC_CHANNEL, true, 1.0f);
     if (measured_mv == 0) return 0;
     // Divider: top = 18k, bottom = 33k -> V5 = measured * (51/33)
-    float v5 = ((float)measured_mv) * (51.0f / 33.0f);
+    float v5 = ((float)measured_mv) * (51.0f / 33.0f) * V5_REF_CORRECTION_FACTOR;
     return (uint16_t)(v5 + 0.5f);
 }
