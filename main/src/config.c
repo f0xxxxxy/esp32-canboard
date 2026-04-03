@@ -6,6 +6,7 @@
 #include "esp_log.h"
 #include "esp_spiffs.h"
 #include "esp_system.h"
+#include "inc/can.h"
 
 #define CONFIG_FILE_PATH "/spiffs/config.bin"
 #define TAG "CONFIG"
@@ -167,7 +168,7 @@ bool config_load(board_config_t *cfg) {
  * @brief Initializes board configuration with sensible defaults.
  *
  * Sets all configuration fields to default values:
- * - CAN start ID: 0x100
+ * - CAN start ID: CAN_BASEID (0x620)
  * - CAN bus speed: 500 kbps
  * - All channels: RAW sensor type, no filtering, no pullup resistor
  * - Channel names: "Input 1", "Input 2", etc.
@@ -194,7 +195,7 @@ void config_set_defaults(board_config_t *cfg) {
     
     memset(cfg, 0, sizeof(*cfg));
     cfg->version = CONFIG_VERSION;
-    cfg->can_start_id = 0x100;
+    cfg->can_start_id = CAN_BASEID;
     cfg->can_speed_kbps = 500; // Default CAN speed 500 kbps
     // V5 reference is measured live; no stored pullup_vref_mv
     

@@ -156,7 +156,7 @@
                 <label for="base-can-id">Base CAN ID:</label>
                 <div style="display:flex; align-items:center;">
                     <span class="hex-prefix">0x</span>
-                    <input id="base-can-id" name="can_start_id" class="hex-input" maxlength="3" value="100" />
+                    <input id="base-can-id" name="can_start_id" class="hex-input" maxlength="3" value="620" />
                 </div>
                 <div class="vref-inline">
                     <span style="font-size:0.95rem; color:#333;">vRef:</span>
@@ -511,7 +511,7 @@
             config.can_start_id = parseInt(baseVal, 16);
         } else {
             const dec = parseInt(baseVal);
-            config.can_start_id = isNaN(dec) ? (config.can_start_id || 0x100) : dec;
+            config.can_start_id = isNaN(dec) ? (config.can_start_id || 0x620) : dec;
         }
         function getFormElem(name) {
             let el = form[name];

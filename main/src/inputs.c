@@ -30,9 +30,7 @@ volatile uint16_t filtered_voltages[NUM_ANALOG_INPUTS];
 SemaphoreHandle_t scaled_pressures_mutex;
 volatile uint16_t scaled_pressures[4];
 
-/* Read raw/converted value for logical analog channel index (0..NUM_ANALOG_INPUTS-1)
-   Returns true on success and fills out_mv with millivolts (0 when v5 absent) */
-bool read_analog_raw(int index, uint16_t *out_mv)
+static bool read_analog_raw_ex(int index, uint16_t *out_mv, uint8_t *out_raw_code, uint8_t *out_cmd, uint8_t *out_addr)
 {
     if (out_mv == NULL) return false;
     if (index < 0 || index >= NUM_ANALOG_INPUTS) {
@@ -43,9 +41,21 @@ bool read_analog_raw(int index, uint16_t *out_mv)
     int device_idx = index / 8; // two ADS7830 devices, 8 channels each
     int ch = index % 8;
     uint8_t raw = 0;
-    if (!ads7830_read_channel(device_idx, ch, &raw)) {
+    uint8_t cmd = 0;
+    uint8_t addr = 0;
+    if (!ads7830_read_channel_meta(device_idx, ch, &raw, &cmd, &addr)) {
         *out_mv = 0;
         return false;
+    }
+
+    if (out_raw_code) {
+        *out_raw_code = raw;
+    }
+    if (out_cmd) {
+        *out_cmd = cmd;
+    }
+    if (out_addr) {
+        *out_addr = addr;
     }
 
     uint16_t v5 = get_v5_rail_mv();
@@ -54,12 +64,34 @@ bool read_analog_raw(int index, uint16_t *out_mv)
         return true;
     }
 
-    // ADS7830 8-bit reading maps to 0..V5. ADS measures across divider bottom side to device
+    // Guard against invalid V5 monitor readings causing large scaling errors.
+    if (v5 < 4000 || v5 > 6000) {
+        static uint32_t last_v5_warn_ms = 0;
+        uint32_t now_ms = (uint32_t)(xTaskGetTickCount() * portTICK_PERIOD_MS);
+        if ((now_ms - last_v5_warn_ms) > 2000U) {
+            ESP_LOGW(adc_log, "V5 reference out of range (%u mV), using 5000 mV fallback", (unsigned)v5);
+            last_v5_warn_ms = now_ms;
+        }
+        v5 = 5000;
+    }
+
+    // Keep conversion referenced to measured V5 rail to track supply variation.
     float vadc_mv = ((float)raw / 255.0f) * (float)v5;
-    // Board input divider: top 5.1k, bottom 10k -> Vin = vadc * (15100 / 10000)
-    float vin_mv = vadc_mv * (15100.0f / 10000.0f);
+    float vin_mv = vadc_mv;
+
+    // Keep outputs within physically valid range for this ADC path.
+    if (vin_mv < 0.0f) vin_mv = 0.0f;
+    if (vin_mv > 5000.0f) vin_mv = 5000.0f;
+
     *out_mv = (uint16_t)(vin_mv + 0.5f);
     return true;
+}
+
+/* Read raw/converted value for logical analog channel index (0..NUM_ANALOG_INPUTS-1)
+   Returns true on success and fills out_mv with millivolts (0 when v5 absent) */
+bool read_analog_raw(int index, uint16_t *out_mv)
+{
+    return read_analog_raw_ex(index, out_mv, NULL, NULL, NULL);
 }
 
 
@@ -386,6 +418,12 @@ void adcProcess(void *arg) {
     ESP_LOGI(adc_log, "ADC Processing Task Started");
     // allocate buffer using maximum possible depth
     uint16_t samples[FILTER_DEPTH_MAX];
+    uint16_t debug_raw_mv[NUM_ANALOG_INPUTS] = {0};
+    uint16_t debug_filtered_mv[NUM_ANALOG_INPUTS] = {0};
+    uint8_t debug_raw_code[NUM_ANALOG_INPUTS] = {0};
+    uint8_t debug_cmd[NUM_ANALOG_INPUTS] = {0};
+    uint8_t debug_addr[NUM_ANALOG_INPUTS] = {0};
+    TickType_t last_debug_log = 0;
     
     while (1) {
         for (int ch = 0; ch < NUM_ANALOG_INPUTS; ch++) {
@@ -395,24 +433,52 @@ void adcProcess(void *arg) {
 
             bool sample_valid = true;
             for (int i = 0; i < depth; ++i) {
-                if (!read_analog_raw(ch, &samples[i]) || samples[i] == 0) {
+                uint8_t raw_code = 0;
+                uint8_t cmd = 0;
+                uint8_t addr = 0;
+                if (!read_analog_raw_ex(ch, &samples[i], &raw_code, &cmd, &addr) || samples[i] == 0) {
                     sample_valid = false;
+                }
+                if (i == 0) {
+                    debug_raw_code[ch] = raw_code;
+                    debug_cmd[ch] = cmd;
+                    debug_addr[ch] = addr;
                 }
                 vTaskDelay(pdMS_TO_TICKS(2));
             }
+            debug_raw_mv[ch] = samples[0];
 
             if (sample_valid) {
                 uint16_t filtered = medianFilterHelper(samples, depth);
+                debug_filtered_mv[ch] = filtered;
                 if (xSemaphoreTake(filtered_voltages_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
                     filtered_voltages[ch] = filtered;
                     xSemaphoreGive(filtered_voltages_mutex);
                 }
             } else {
+                debug_filtered_mv[ch] = 0;
                 if (xSemaphoreTake(filtered_voltages_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
                     filtered_voltages[ch] = 0;
                     xSemaphoreGive(filtered_voltages_mutex);
                 }
             }
+        }
+
+        TickType_t now = xTaskGetTickCount();
+        if ((now - last_debug_log) >= pdMS_TO_TICKS(1000)) {
+            for (int ch = 0; ch < NUM_ANALOG_INPUTS; ++ch) {
+                ESP_LOGI(adc_log,
+                         "CH%02d dev=%d loc=%d addr=0x%02X cmd=0x%02X raw=%u raw_mv=%u filtered_mv=%u",
+                         ch + 1,
+                         ch / 8,
+                         ch % 8,
+                         debug_addr[ch],
+                         debug_cmd[ch],
+                         debug_raw_code[ch],
+                         debug_raw_mv[ch],
+                         debug_filtered_mv[ch]);
+            }
+            last_debug_log = now;
         }
 
         vTaskDelay(pdMS_TO_TICKS(10));

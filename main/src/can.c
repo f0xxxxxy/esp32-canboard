@@ -55,18 +55,34 @@ esp_err_t can_init(void) {
         return ESP_FAIL;
     }
 
-    ESP_LOGI(can_log, "TWAI driver installed");
+    err = twai_start_v2(twai_can);
+    if (err != ESP_OK) {
+        ESP_LOGE(can_log, "Failed to start TWAI driver: %s", esp_err_to_name(err));
+        twai_driver_uninstall_v2(twai_can);
+        return ESP_FAIL;
+    }
+
+    ESP_LOGI(can_log, "TWAI driver installed and started");
     return ESP_OK;
 }
 
 void canTransmit(void *arg)
 {
     ESP_LOGI(can_log, "CAN Transmit Task Started");
+    TickType_t last_wake = xTaskGetTickCount();
+    const TickType_t tx_period = pdMS_TO_TICKS(40); // 25 Hz
+
+    uint32_t base_id = board_cfg.can_start_id;
+    if (base_id == 0 || base_id > 0x7F8) {
+        ESP_LOGW(can_log, "Invalid CAN base ID 0x%03lX, falling back to 0x%03X", (unsigned long)base_id, (unsigned int)CAN_BASEID);
+        base_id = CAN_BASEID;
+    }
+    ESP_LOGI(can_log, "CAN TX ID range: 0x%03lX-0x%03lX", (unsigned long)base_id, (unsigned long)(base_id + 7));
 
     // Prepare TX message templates (base IDs come from board config)
     twai_message_t tx_msg[8];
     for (size_t i = 0; i < 8; ++i) {
-        tx_msg[i] = init_twai_message(board_cfg.can_start_id + i);
+        tx_msg[i] = init_twai_message(base_id + i);
     }
 
     while (1) {
@@ -90,7 +106,10 @@ void canTransmit(void *arg)
                 tx_msg[msg].data[j*2 + 0] = val & 0xFF;
                 tx_msg[msg].data[j*2 + 1] = (val >> 8) & 0xFF;
             }
-            twai_transmit(&tx_msg[msg], pdMS_TO_TICKS(1000));
+            esp_err_t tx_err = twai_transmit_v2(twai_can, &tx_msg[msg], pdMS_TO_TICKS(1000));
+            if (tx_err != ESP_OK) {
+                ESP_LOGW(can_log, "TWAI TX failed (ID=0x%03lX): %s", (unsigned long)tx_msg[msg].identifier, esp_err_to_name(tx_err));
+            }
             vTaskDelay(pdMS_TO_TICKS(1));
         }
 
@@ -138,10 +157,13 @@ void canTransmit(void *arg)
                 tx_msg[msg].data[j*2 + 0] = val & 0xFF;
                 tx_msg[msg].data[j*2 + 1] = (val >> 8) & 0xFF;
             }
-            twai_transmit(&tx_msg[msg], pdMS_TO_TICKS(1000));
+            esp_err_t tx_err = twai_transmit_v2(twai_can, &tx_msg[msg], pdMS_TO_TICKS(1000));
+            if (tx_err != ESP_OK) {
+                ESP_LOGW(can_log, "TWAI TX failed (ID=0x%03lX): %s", (unsigned long)tx_msg[msg].identifier, esp_err_to_name(tx_err));
+            }
             vTaskDelay(pdMS_TO_TICKS(1));
         }
 
-        vTaskDelay(pdMS_TO_TICKS(80));
+        vTaskDelayUntil(&last_wake, tx_period);
     }
 }
