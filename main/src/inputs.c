@@ -58,25 +58,9 @@ static bool read_analog_raw_ex(int index, uint16_t *out_mv, uint8_t *out_raw_cod
         *out_addr = addr;
     }
 
-    uint16_t v5 = get_v5_rail_mv();
-    if (v5 == 0) {
-        *out_mv = 0;
-        return true;
-    }
-
-    // Guard against invalid V5 monitor readings causing large scaling errors.
-    if (v5 < 4000 || v5 > 6000) {
-        static uint32_t last_v5_warn_ms = 0;
-        uint32_t now_ms = (uint32_t)(xTaskGetTickCount() * portTICK_PERIOD_MS);
-        if ((now_ms - last_v5_warn_ms) > 2000U) {
-            ESP_LOGW(adc_log, "V5 reference out of range (%u mV), using 5000 mV fallback", (unsigned)v5);
-            last_v5_warn_ms = now_ms;
-        }
-        v5 = 5000;
-    }
-
-    // Convert ADS code to node voltage using ADS full-scale (3.3V), then
-    // reconstruct pre-divider input voltage using fixed 5.1k/10k ratio.
+    // ADS7830 conversion is referenced to its supply (3.3V on this board).
+    // Each analog input is measured through a fixed divider:
+    // Vadc = Vin * (DIVIDER_LOW_OHM / DIVIDER_TOTAL_OHM)
     float vadc_mv = ((float)raw / 255.0f) * ADS7830_REF_MV;
     float vin_mv = vadc_mv * ((float)DIVIDER_TOTAL_OHM / (float)DIVIDER_LOW_OHM);
 
@@ -89,7 +73,7 @@ static bool read_analog_raw_ex(int index, uint16_t *out_mv, uint8_t *out_raw_cod
 }
 
 /* Read raw/converted value for logical analog channel index (0..NUM_ANALOG_INPUTS-1)
-   Returns true on success and fills out_mv with millivolts (0 when v5 absent) */
+   Returns true on success and fills out_mv with millivolts (0 when read fails) */
 bool read_analog_raw(int index, uint16_t *out_mv)
 {
     return read_analog_raw_ex(index, out_mv, NULL, NULL, NULL);
