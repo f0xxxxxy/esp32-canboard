@@ -58,7 +58,7 @@ static bool read_analog_raw_ex(int index, uint16_t *out_mv, uint8_t *out_raw_cod
         *out_addr = addr;
     }
 
-    // ADS7830 conversion is referenced to its supply (3.3V on this board).
+    // ADS7830 conversion uses the configured reference full-scale.
     // Each analog input is measured through a fixed divider:
     // Vadc = Vin * (DIVIDER_LOW_OHM / DIVIDER_TOTAL_OHM)
     float vadc_mv = ((float)raw / 255.0f) * ADS7830_REF_MV;
