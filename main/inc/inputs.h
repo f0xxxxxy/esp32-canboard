@@ -128,7 +128,9 @@ static const ntc_point_t bosch_ntc_0280130026_points[] = { // Bosch 0280130026, 
     {   0,  5896 }, {  10,  3792 }, {  20,  2500 }, {  30,  1707 },
     {  40,  1175 }, {  50,   834 }, {  60,   596 }, {  70,   436 },
     {  80,   323 }, {  90,   243 }, { 100,   187 }, { 110,   144 },
-    { 120,   113 }, { 130,    89 }, { 140,    71 }
+    { 120,   113 }, { 130,    89 }, { 140,    71 },
+    // Estimated extrapolation beyond published points for high-temperature operation.
+    { 150,    56 }, { 160,    45 }, { 170,    36 }, { 180,    29 }
 };
 
 static const ntc_point_t bosch_tmap_0281002437_points[] = { // Bosch TMAP 0281002437
