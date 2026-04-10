@@ -1,15 +1,15 @@
 # ESP32-CANBoard
 * ESP32-S3 Dual Core SoC
 * MCP2562T CAN Transceiver (up to 1Mbps)
-* 16x 5V-tolerant Inputs via two ADS7830 I2C expanders (16 analog channels)
-* Internal 5V rail reference for accurate output calculation
-* 3x 5V Output Pins - Fused at 500mA (Thermal Reset)
-* USB-C for programming, with JTAG support for debugging
-* ESD Protection on both USB and CAN
+* 16x 5V tolerant analog inputs via two ADS7830 I2C expanders.
+* 3x 5V power output pins for digital sensors, thermally fused at 500mA.
+* USB-C for programming, with JTAG support for debugging.
+* ESD Protection on both USB and CAN, with reverse polarity protection on power input.
 * TE Connectivity AMP 26 Way Superseal Connector (PCB Socket: 9-6437287-8, Cable Plug: 3-1437290-7)
 * Optional pull-up resistors via fused 5V rail for each input (TH 6.3mm)
-* Configuration via web interface over WiFi
-* Optional per-channel median filtering with selectable strength (none/low/med/high) to reduce noise
+* Internal 5V rail reference for accurate output calculation when pull-up in use.
+* Configuration via web interface over WiFi, with backup and restore functionality.
+* Optional per-channel median filtering with selectable strength (none/low/med/high) to reduce noise.
 
 ## Device Configuration
 
@@ -22,10 +22,9 @@ On each boot the board enables a WiFi access point and web configuration interfa
 The web UI allows you to:
 
 - View and edit per-channel settings (name, sensor type, pull-up, pressure unit, filter level, voltage and pressure calibration).
-- Configure required CAN parameters - Base ID and bus speed.
-- View current 5V rail reference, input voltages and calculated values in real time.
-- Backup the entire configuration to a JSON file.
-- Restore configuration from a previously exported JSON file.
+- Configure required base CAN parameters - ID and bus speed.
+- View current 5V rail reference, input voltages and calculated values in real time when external power is connected.
+- Backup and restore the entire configuration to or from a JSON file.
 
 ![esp32-canboard-configuration](docs/esp32-canboard-configuration.png)
 
@@ -41,7 +40,7 @@ The web UI allows you to:
 
 ## CAN Output
 
-The device transmits input data as a set of eight CAN frames starting at the configured base ID. All frames use DLC=8 and little-endian byte ordering.
+The device transmits input data as a set of eight CAN frames starting at the configured base ID. All frames use DLC8 and little-endian byte ordering.
 
 Overview:
 - Frames 0..3 (Base ID .. Base ID+3): packed analog voltages for all 16 channels, 4 channels per frame, each channel as uint16 (millivolts, LSB then MSB).
@@ -80,3 +79,33 @@ Example DBC for signal names and scaling: [dbc/esp32-canboard.dbc](dbc/esp32-can
 ![esp32-canboard-top](docs/esp32-canboard-top.png)
 
 ![esp32-canboard-bottom](docs/esp32-canboard-bottom.png)
+
+## Connector Pinout
+|Pin|Function|Additional Information|
+|:---:|:---|:---|
+|1|12v Supply||
+|2|Ground||
+|3|5v Sensor Supply|500ma Thermal Fuse|
+|4|5v Sensor Supply|500ma Thermal Fuse|
+|5|Ground||
+|6|CAN High||
+|7|CAN Low||
+|8|Ground||
+|9|5v Sensor Supply|500ma Thermal Fuse|
+|10|Input 1||
+|11|Input 2||
+|12|Input 3||
+|13|Input 4||
+|14|Input 5||
+|15|Input 6||
+|16|Input 7||
+|17|Input 8||
+|18|Input 9||
+|19|Input 10||
+|20|Input 11||
+|21|Input 12||
+|22|Input 13||
+|23|Input 14||
+|24|Input 15||
+|25|Input 16||
+|26|Ground||
