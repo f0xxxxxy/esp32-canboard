@@ -72,8 +72,12 @@ static bool read_analog_raw_ex(int index, uint16_t *out_mv, uint8_t *out_raw_cod
     return true;
 }
 
-/* Read raw/converted value for logical analog channel index (0..NUM_ANALOG_INPUTS-1)
-   Returns true on success and fills out_mv with millivolts (0 when read fails) */
+/**
+ * @brief Read raw/converted value for a logical analog channel index.
+ * @param index Logical analog index in range [0, NUM_ANALOG_INPUTS-1].
+ * @param out_mv Pointer to output millivolt value.
+ * @return true on successful read; false on failure.
+ */
 bool read_analog_raw(int index, uint16_t *out_mv)
 {
     return read_analog_raw_ex(index, out_mv, NULL, NULL, NULL);
@@ -448,6 +452,14 @@ void adcProcess(void *arg) {
     vTaskDelete(NULL);
 }
 
+/**
+ * @brief FreeRTOS task that computes pressure conversions from filtered voltages.
+ *
+ * Updates the shared scaled_pressures array for configured pressure channels
+ * at a fixed interval.
+ *
+ * @param arg Unused FreeRTOS task argument.
+ */
 void pressureProcess(void *arg) {
     ESP_LOGI(adc_log, "Pressure Sensor Processing Task Started");
     while (1) {

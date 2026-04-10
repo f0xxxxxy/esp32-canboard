@@ -10,10 +10,10 @@
 #include "inc/http_server.h"
 #include "inc/wifi_config.h"
 
-#define WIFI_SSID "ESP32-CanBoard"      ///< WiFi access point SSID
-#define WIFI_PASS "canboard123"         ///< WiFi access point password
-#define WIFI_MAX_CONN 1                 ///< Maximum number of simultaneous WiFi connections
-#define CONFIG_TIMEOUT_MS 120000        ///< Configuration mode timeout in milliseconds (120 seconds)
+#define WIFI_SSID "ESP32-CanBoard"      // WiFi access point SSID.
+#define WIFI_PASS "canboard123"         // WiFi access point password.
+#define WIFI_MAX_CONN 1                  // Maximum number of simultaneous WiFi connections.
+#define CONFIG_TIMEOUT_MS 120000         // Configuration mode timeout in milliseconds.
 
 /**
  * @brief Log tag for this module

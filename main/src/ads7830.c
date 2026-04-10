@@ -8,13 +8,22 @@ static const char *TAG = "ads7830";
 
 static uint8_t device_addrs[2] = { ADS7830_ADDR_0, ADS7830_ADDR_1 };
 
+/**
+ * @brief Probe an ADS7830 address by attempting a one-byte read.
+ * @param addr 7-bit I2C address to probe.
+ * @return true when the device acknowledges; false otherwise.
+ */
 static bool ads7830_probe_addr(uint8_t addr)
 {
     uint8_t tmp = 0;
     return i2c_master_write_read(addr, NULL, 0, &tmp, 1);
 }
 
-/* ADS7830 single-ended channel select encoding (datasheet C2/C1/C0). */
+/**
+ * @brief Build ADS7830 command byte for a single-ended channel.
+ * @param channel Channel number 0..7.
+ * @return Encoded command byte.
+ */
 static uint8_t ads7830_make_cmd(uint8_t channel)
 {
     uint8_t ch = (uint8_t)(channel & 0x07);
@@ -22,6 +31,11 @@ static uint8_t ads7830_make_cmd(uint8_t channel)
     return (uint8_t)(0x84 | (encoded << 4));
 }
 
+/**
+ * @brief Initialize ADS7830 devices and resolve configured addresses.
+ * @return true when initialization completes (devices may still be absent);
+ *         false only when I2C initialization fails.
+ */
 bool ads7830_init(void)
 {
     // Initialize I2C on SDA=GPIO12, SCL=GPIO13
@@ -67,6 +81,15 @@ bool ads7830_init(void)
     return true;
 }
 
+/**
+ * @brief Read one ADS7830 channel and optionally return metadata.
+ * @param device_idx ADS7830 index (0 or 1).
+ * @param channel Channel index 0..7.
+ * @param out_raw Pointer to converted 8-bit raw sample.
+ * @param out_cmd Optional pointer to receive command byte (may be NULL).
+ * @param out_addr Optional pointer to receive resolved I2C address (may be NULL).
+ * @return true on success; false on validation or I2C error.
+ */
 bool ads7830_read_channel_meta(int device_idx, int channel, uint8_t *out_raw, uint8_t *out_cmd, uint8_t *out_addr)
 {
     if (device_idx < 0 || device_idx > 1 || channel < 0 || channel > 7 || out_raw == NULL) return false;
@@ -105,6 +128,13 @@ bool ads7830_read_channel_meta(int device_idx, int channel, uint8_t *out_raw, ui
     return true;
 }
 
+/**
+ * @brief Read one ADS7830 channel.
+ * @param device_idx ADS7830 index (0 or 1).
+ * @param channel Channel index 0..7.
+ * @param out_raw Pointer to converted 8-bit raw sample.
+ * @return true on success; false on validation or I2C error.
+ */
 bool ads7830_read_channel(int device_idx, int channel, uint8_t *out_raw)
 {
     return ads7830_read_channel_meta(device_idx, channel, out_raw, NULL, NULL);

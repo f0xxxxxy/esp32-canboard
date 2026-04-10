@@ -16,7 +16,7 @@ extern board_config_t board_cfg;
 
 twai_handle_t twai_can;
 twai_timing_config_t t_can_config = TWAI_TIMING_CONFIG_500KBITS();
-/// Filter configuration: reject all incoming messages (TX-only mode)
+/** @brief Filter configuration: reject all incoming messages (TX-only mode). */
 twai_filter_config_t f_config = { .acceptance_code = 0xFFFFFFFF, .acceptance_mask = 0x00000000, .single_filter = true };
 twai_general_config_t can_config = TWAI_GENERAL_CONFIG_DEFAULT(DRIVECAN_TX_GPIO_NUM, DRIVECAN_RX_GPIO_NUM, TWAI_MODE_NORMAL);
 

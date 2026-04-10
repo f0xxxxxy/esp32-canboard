@@ -6,25 +6,27 @@
 #define DRIVECAN_TX_GPIO_NUM       GPIO_NUM_11
 #define DRIVECAN_RX_GPIO_NUM       GPIO_NUM_10
 
-/* Default CAN base ID (can be overridden via board config) */
+/** @brief Default CAN base ID (can be overridden via board config). */
 #define CAN_BASEID 0x620
 
-/// TWAI driver handle for CAN bus communication
+/** @brief TWAI driver handle for CAN bus communication. */
 extern twai_handle_t twai_can;
 
-/// Log tag for CAN module
+/** @brief Log tag for CAN module. */
 static const char* can_log = "can";
 
-/// TWAI timing configuration for CAN bus speed
+/** @brief TWAI timing configuration for CAN bus speed. */
 extern twai_timing_config_t t_can_config;
-/// TWAI filter configuration for CAN message filtering
+/** @brief TWAI filter configuration for CAN message filtering. */
 extern twai_filter_config_t f_config;
-/// TWAI general configuration for CAN bus initialization
+/** @brief TWAI general configuration for CAN bus initialization. */
 extern twai_general_config_t can_config;
 
-/// @brief Helper function to initialize a TWAI message with a given ID
-/// @param id CAN message identifier
-/// @return Initialized twai_message_t with 8-byte data payload
+/**
+ * @brief Initialize a TWAI message with a given ID.
+ * @param id Standard CAN identifier to assign.
+ * @return Initialized TWAI message with 8-byte payload.
+ */
 static inline twai_message_t init_twai_message(uint32_t id) {
     twai_message_t msg = {
         .identifier = id,
@@ -35,18 +37,18 @@ static inline twai_message_t init_twai_message(uint32_t id) {
     return msg;
 }
 
-/// @brief Initialize and start TWAI/CAN driver with dynamic speed configuration
-/// Reads CAN speed from board_config_t (125/250/500/1000 kbps) and applies appropriate timing.
-/// Must be called before creating canTransmit task.
-/// @return ESP_OK on success, ESP_FAIL on driver initialization error
+/**
+ * @brief Initialize and start TWAI/CAN driver with dynamic speed configuration.
+ * @return ESP_OK on success; ESP_FAIL on initialization failure.
+ */
 esp_err_t can_init(void);
 
-/// @brief FreeRTOS task for transmitting CAN messages
-/// Periodically transmits 3 multiplexed CAN messages containing voltage data from all 10 channels.
-/// Message format:
-/// - Message 1 (base ID): CPU temp (byte 0), firmware revision (byte 1), channels 0-2 (bytes 2-7)
-/// - Message 2 (base ID + 1): Channels 3-6 (bytes 0-7)
-/// - Message 3 (base ID + 2): Channels 7-9 (bytes 0-5), reserved (bytes 6-7)
-/// All voltages encoded as uint16_t little-endian, 0.001V scale.
-/// @param arg Unused FreeRTOS task parameter
+/**
+ * @brief FreeRTOS task for transmitting CAN messages.
+ *
+ * Sends eight messages starting at base ID:
+ * - base+0..base+3: raw analog channel voltages for channels 1..16 (mV, uint16 LE)
+ * - base+4..base+7: converted per-channel sensor outputs for channels 1..16
+ * @param arg Unused FreeRTOS task argument.
+ */
 void canTransmit(void *arg);

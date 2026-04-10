@@ -6,6 +6,12 @@
 
 static const char *TAG = "i2c_master";
 
+/**
+ * @brief Initialize the ESP-IDF I2C master driver on I2C_NUM_0.
+ * @param sda_gpio SDA GPIO pin.
+ * @param scl_gpio SCL GPIO pin.
+ * @return true on success; false when parameter config or driver install fails.
+ */
 bool i2c_master_init(gpio_num_t sda_gpio, gpio_num_t scl_gpio)
 {
     i2c_config_t conf = {
@@ -26,12 +32,20 @@ bool i2c_master_init(gpio_num_t sda_gpio, gpio_num_t scl_gpio)
         ESP_LOGE(TAG, "i2c_driver_install failed: %d", err);
         return false;
     }
-    // Small delay after I2C init: some ADC/I2C devices may not respond immediately
-    // Increased to 300 ms to improve reliability on power-up/boot
+    // Small delay after I2C init improves peripheral readiness at boot.
     vTaskDelay(pdMS_TO_TICKS(300));
     return true;
 }
 
+/**
+ * @brief Perform a combined I2C write-read transaction.
+ * @param addr 7-bit target device address.
+ * @param write_data Optional write buffer pointer.
+ * @param write_len Number of bytes to write.
+ * @param read_data Optional read buffer pointer.
+ * @param read_len Number of bytes to read.
+ * @return true when command sequence succeeds; false on I2C command failure.
+ */
 bool i2c_master_write_read(uint8_t addr, const uint8_t *write_data, size_t write_len, uint8_t *read_data, size_t read_len)
 {
     i2c_cmd_handle_t cmd = i2c_cmd_link_create();

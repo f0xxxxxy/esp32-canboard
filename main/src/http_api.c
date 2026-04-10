@@ -10,6 +10,11 @@
 
 static const char *TAG = "http_api";
 
+/**
+ * @brief HTTP GET handler for /api/inputs.
+ * @param req HTTP request context.
+ * @return ESP_OK on success, or ESP_ERR_NO_MEM when JSON buffer allocation fails.
+ */
 static esp_err_t inputs_get_handler(httpd_req_t *req)
 {
     char *buf = NULL;
@@ -27,7 +32,7 @@ static esp_err_t inputs_get_handler(httpd_req_t *req)
 
     uint16_t v5 = get_v5_rail_mv();
 
-    // Build JSON
+    // Build JSON response payload.
     size_t pos = 0;
     pos += snprintf(buf + pos, buf_len - pos, "{\"v5_rail_mv\":%u,\"channels\":[", v5);
     for (int i = 0; i < NUM_ANALOG_INPUTS; ++i) {
@@ -46,6 +51,11 @@ static esp_err_t inputs_get_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
+/**
+ * @brief Register /api/inputs endpoint on an HTTP server instance.
+ * @param server HTTP server handle.
+ * @return ESP_OK on success; error code from httpd_register_uri_handler otherwise.
+ */
 esp_err_t register_inputs_uri(httpd_handle_t server)
 {
     httpd_uri_t uri = {

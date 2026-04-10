@@ -26,15 +26,21 @@
 #include "esp_spiffs.h"
 
 #include "inc/i2c_master.h"
-// Global board configuration (shared with other modules)
+
+/** @brief Global board configuration shared across modules. */
 board_config_t board_cfg;
 
+/**
+ * @brief Application entry point.
+ *
+ * Initializes persistent configuration, WiFi configuration mode, sensors,
+ * ADC acquisition, CAN driver, and runtime tasks.
+ */
 void app_main(void)
 {
     static const char *log_tag = "APP";
     
-    // Load board config from SPIFFS (with CRC check)
-    // Ensure SPIFFS is mounted so config_load/config_save can access files
+    // Mount SPIFFS first so config_load/config_save can access persisted data.
     esp_err_t spiffs_ret = esp_vfs_spiffs_register(&(esp_vfs_spiffs_conf_t){
         .base_path = "/spiffs",
         .partition_label = NULL,
@@ -58,10 +64,10 @@ void app_main(void)
         ESP_LOGI(log_tag, "Config loaded and CRC valid");
     }
 
-    // Start WiFi config mode (AP + HTTP server with timeout)
+    // Start WiFi configuration mode (AP + HTTP server with timeout).
     wifi_config_mode_start();
     
-    // Initialize CPU temperature sensor
+    // Initialize CPU temperature sensor.
     esp_err_t err = initCpuTempSensor();
     if (err != ESP_OK) {
         ESP_LOGW(log_tag, "Failed to initialize CPU temp sensor: %s", esp_err_to_name(err));
@@ -70,26 +76,23 @@ void app_main(void)
         ESP_LOGI(log_tag, "Current CPU Temperature: %d°C", cpu_temp);
     }
 
-
-    // Initialize ADC channels
+    // Initialize ADC channels.
     initAdcChannels();
 
-    // I2C scan removed: not required
-
-    // Initialize TWAI/CAN driver with dynamic speed from config
+    // Initialize TWAI/CAN driver with speed from persisted config.
     if (can_init() != ESP_OK) {
         ESP_LOGE(log_tag, "Failed to initialize CAN driver!");
         abort();
     }
 
-    // Create mutex for protecting filtered voltage array
+    // Create mutex protecting filtered voltage array.
     filtered_voltages_mutex = xSemaphoreCreateMutex();
     if (filtered_voltages_mutex == NULL) {
         ESP_LOGE(log_tag, "Failed to create voltage mutex! Aborting...");
         abort();
     }
 
-    // Process ADCs on Core 1
+    // Start ADC processing task on Core 1.
     BaseType_t task_result = xTaskCreatePinnedToCore(
         adcProcess, "adcProcess", 8192, NULL, 5, NULL, 1);
     if (task_result != pdPASS) {
@@ -97,7 +100,7 @@ void app_main(void)
         abort();
     }
 
-    // Transmit CAN on Core 0
+    // Start CAN transmit task on Core 0.
     task_result = xTaskCreatePinnedToCore(
         canTransmit, "canTransmit", 8192, NULL, 10, NULL, 0);
     if (task_result != pdPASS) {

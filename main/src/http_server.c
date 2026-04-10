@@ -28,6 +28,15 @@ extern twai_handle_t twai_can;
 extern esp_err_t can_init(void);
 extern esp_err_t register_inputs_uri(httpd_handle_t server);
 
+/**
+ * @brief Apply a new runtime board configuration.
+ *
+ * Updates in-memory configuration and reinitializes CAN when speed changes.
+ * Restores previous configuration if CAN reinitialization fails.
+ *
+ * @param cfg Pointer to candidate configuration.
+ * @return true when configuration is applied successfully; false otherwise.
+ */
 static bool apply_runtime_config(const board_config_t *cfg) {
     if (cfg == NULL) {
         return false;
@@ -66,7 +75,13 @@ static bool apply_runtime_config(const board_config_t *cfg) {
     return true;
 }
 
-// Delayed restart task: stops HTTP server and WiFi, then restarts the chip.
+/**
+ * @brief Restart task executed after sending HTTP reboot response.
+ *
+ * Stops HTTP server and WiFi, waits briefly to flush I/O, then restarts the chip.
+ *
+ * @param arg Unused FreeRTOS task argument.
+ */
 static void delayed_restart_task(void *arg) {
     ESP_LOGI(TAG, "Delayed restart task: stopping HTTP server and WiFi");
     stop_http_server();
