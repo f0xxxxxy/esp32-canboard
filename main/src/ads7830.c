@@ -14,12 +14,12 @@ static bool ads7830_probe_addr(uint8_t addr)
     return i2c_master_write_read(addr, NULL, 0, &tmp, 1);
 }
 
-/* ADS7830 single-ended channel select uses a mux lookup, not linear channel bits. */
+/* ADS7830 single-ended channel select encoding (datasheet C2/C1/C0). */
 static uint8_t ads7830_make_cmd(uint8_t channel)
 {
-    static const uint8_t mux_lut[8] = { 0, 4, 1, 5, 2, 6, 3, 7 };
-    uint8_t mux = mux_lut[channel & 0x07];
-    return (uint8_t)(0x84 | (mux << 4));
+    uint8_t ch = (uint8_t)(channel & 0x07);
+    uint8_t encoded = (uint8_t)((ch >> 1) | ((ch & 0x01U) << 2));
+    return (uint8_t)(0x84 | (encoded << 4));
 }
 
 bool ads7830_init(void)
@@ -72,7 +72,9 @@ bool ads7830_read_channel_meta(int device_idx, int channel, uint8_t *out_raw, ui
     if (device_idx < 0 || device_idx > 1 || channel < 0 || channel > 7 || out_raw == NULL) return false;
     uint8_t addr = device_addrs[device_idx];
     uint8_t cmd = ads7830_make_cmd((uint8_t)channel);
-    uint8_t dummy = 0;
+    uint8_t s0 = 0;
+    uint8_t s1 = 0;
+    uint8_t s2 = 0;
 
     if (out_cmd) {
         *out_cmd = cmd;
@@ -81,13 +83,25 @@ bool ads7830_read_channel_meta(int device_idx, int channel, uint8_t *out_raw, ui
         *out_addr = addr;
     }
 
-    // First read after channel switch may contain previous conversion; discard it.
-    if (!i2c_master_write_read(addr, &cmd, 1, &dummy, 1)) {
+    // Select channel.
+    if (!i2c_master_write_read(addr, &cmd, 1, NULL, 0)) {
         return false;
     }
-    if (!i2c_master_write_read(addr, &cmd, 1, out_raw, 1)) {
+    // Allow mux/sample to settle after channel change.
+    vTaskDelay(pdMS_TO_TICKS(1));
+
+    // Discard initial samples after channel switch.
+    if (!i2c_master_write_read(addr, NULL, 0, &s0, 1)) {
         return false;
     }
+    if (!i2c_master_write_read(addr, NULL, 0, &s1, 1)) {
+        return false;
+    }
+    if (!i2c_master_write_read(addr, NULL, 0, &s2, 1)) {
+        return false;
+    }
+
+    *out_raw = s2;
     return true;
 }
 

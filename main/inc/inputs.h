@@ -23,8 +23,8 @@
 #define EXT_VOLT_ADC_CHANNEL ADC_CHANNEL_8
 // Per-board gain correction from measured midpoint (DMM) vs ADC-converted midpoint.
 #define V5_REF_CORRECTION_FACTOR 1.0264f
-// ADS7830 conversion full-scale in mV (device referenced to 3.3V).
-#define ADS7830_REF_MV 3300.0f
+// ADS7830 conversion full-scale in mV (internal reference mode).
+#define ADS7830_REF_MV 2500.0f
 
 /* Median filter sample depths for selectable levels */
 #define FILTER_DEPTH_LOW 5                         ///< Samples for "low" filter level
