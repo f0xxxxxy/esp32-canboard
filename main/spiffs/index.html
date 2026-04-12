@@ -222,6 +222,36 @@
     <script>
     const SENSOR_TYPES = ["Raw", "NTC", "Pressure"];
     const NTC_TABLES = ["Bosch 0280130026", "Bosch TMAP 0281002437", "Universal 1/8 NPT"];
+
+    // Unit conversion helpers: UI displays values in the selected unit
+    // but configuration is stored canonically in kPa. Use these helpers
+    // to convert between kPa <-> bar/psi for display and saving.
+    function convertKpaToUnit(kpa, unit) {
+        if (kpa === null || typeof kpa === 'undefined' || isNaN(parseFloat(kpa))) return '';
+        kpa = parseFloat(kpa);
+        switch (unit) {
+            case 1: // bar
+                return (kpa / 100.0).toFixed(2);
+            case 2: // psi
+                return (kpa / 6.89476).toFixed(2);
+            default: // kPa
+                return kpa.toFixed(2);
+        }
+    }
+
+    function convertUnitToKpa(value, unit) {
+        if (value === null || typeof value === 'undefined' || isNaN(parseFloat(value))) return NaN;
+        value = parseFloat(value);
+        switch (unit) {
+            case 1: // bar
+                return value * 100.0;
+            case 2: // psi
+                return value * 6.89476;
+            default: // kPa
+                return value;
+        }
+    }
+
     let config = null;
     const loadingOverlay = document.getElementById('loading-overlay');
     const overlayText = document.getElementById('overlay-text');
@@ -372,7 +402,27 @@
     function fillTable() {
         const tbody = document.getElementById('channels-tbody');
         tbody.innerHTML = config.channels.map((ch,i)=>createRow(i,ch)).join('');
+        // Store canonical kPa values in data attributes so we can display
+        // them in the selected unit without losing precision.
+        for (let i = 0; i < 16; ++i) {
+            try {
+                const ch = config.channels[i];
+                if (!ch) continue;
+                if (ch.params && ch.params.pressure) {
+                    const pminkpa = ch.params.pressure.min_kpa;
+                    const pmaxkpa = ch.params.pressure.max_kpa;
+                    const minkEl = document.querySelector(`[name="pminkpa${i}"]`);
+                    const maxEl = document.querySelector(`[name="pmaxkpa${i}"]`);
+                    if (minkEl) minkEl.dataset.kpa = (typeof pminkpa !== 'undefined' && pminkpa !== null) ? pminkpa : '';
+                    if (maxEl) maxEl.dataset.kpa = (typeof pmaxkpa !== 'undefined' && pmaxkpa !== null) ? pmaxkpa : '';
+                }
+            } catch (e) {
+                // ignore per-row failures
+            }
+        }
         attachTypeHandlers();
+        // Ensure the displayed numeric values reflect the selected unit.
+        for (let i = 0; i < 16; ++i) updateUnitLabel(i);
     }
 
     function updateRowControls(i) {
@@ -407,8 +457,25 @@
             sel.onchange = () => updateRowControls(i);
             updateRowControls(i);
             const punitSel = document.querySelector(`[name="punit${i}"]`);
+            const pminEl = document.querySelector(`[name="pminkpa${i}"]`);
+            const pmaxEl = document.querySelector(`[name="pmaxkpa${i}"]`);
             if (punitSel) {
                 punitSel.onchange = () => updateUnitLabel(i);
+            }
+            // When the user edits the displayed value, update the canonical kPa dataset
+            if (pminEl) {
+                pminEl.oninput = function() {
+                    const unit = punitSel ? parseInt(punitSel.value) : 0;
+                    if (!isNaN(parseFloat(this.value))) this.dataset.kpa = convertUnitToKpa(this.value, unit);
+                    else this.dataset.kpa = '';
+                };
+            }
+            if (pmaxEl) {
+                pmaxEl.oninput = function() {
+                    const unit = punitSel ? parseInt(punitSel.value) : 0;
+                    if (!isNaN(parseFloat(this.value))) this.dataset.kpa = convertUnitToKpa(this.value, unit);
+                    else this.dataset.kpa = '';
+                };
             }
             updateUnitLabel(i);
         }
@@ -420,10 +487,12 @@
 
     function updateUnitLabel(i) {
         const punitSel = document.querySelector(`[name="punit${i}"]`);
+        let unitIndex = 0;
         let text = 'kPa';
         if (punitSel && !punitSel.disabled) {
             const v = parseInt(punitSel.value);
-            if (!isNaN(v)) text = unitTextFromIndex(v);
+            if (!isNaN(v)) unitIndex = v;
+            text = unitTextFromIndex(unitIndex);
         }
 
         function findUnitSpanForInput(inputEl) {
@@ -440,6 +509,17 @@
         const kmaxSpan = findUnitSpanForInput(kmaxInput);
         if (kminSpan) kminSpan.textContent = text;
         if (kmaxSpan) kmaxSpan.textContent = text;
+        // Convert displayed numeric values from canonical kPa to selected unit
+        if (kminInput) {
+            const kpaVal = (kminInput.dataset && typeof kminInput.dataset.kpa !== 'undefined' && kminInput.dataset.kpa !== '') ? parseFloat(kminInput.dataset.kpa) : (parseFloat(kminInput.value) || 0);
+            const display = convertKpaToUnit(kpaVal, unitIndex);
+            kminInput.value = display;
+        }
+        if (kmaxInput) {
+            const kpaVal = (kmaxInput.dataset && typeof kmaxInput.dataset.kpa !== 'undefined' && kmaxInput.dataset.kpa !== '') ? parseFloat(kmaxInput.dataset.kpa) : (parseFloat(kmaxInput.value) || 0);
+            const display = convertKpaToUnit(kpaVal, unitIndex);
+            kmaxInput.value = display;
+        }
     }
 
     async function loadConfig() {
@@ -546,22 +626,40 @@
             config.channels[i].type = typeEl ? parseInt(typeEl.value) : 0;
             config.channels[i].filtering = filtEl ? parseInt(filtEl.value) : 0;
             config.channels[i].params = {};
-            if (config.channels[i].type === 1) {
-                const ntcEl = getFormElem(`ntc${i}`);
-                config.channels[i].params.ntc = { table_id: ntcEl ? parseInt(ntcEl.value) : 0 };
-            } else if (config.channels[i].type === 2) {
-                const minmvEl = getFormElem(`pminmv${i}`);
-                const maxmvEl = getFormElem(`pmaxmv${i}`);
-                const minkpaEl = getFormElem(`pminkpa${i}`);
-                const maxkpaEl = getFormElem(`pmaxkpa${i}`);
-                const punitEl = getFormElem(`punit${i}`);
-                config.channels[i].params.pressure = {
-                    min_mv: minmvEl ? parseInt(minmvEl.value) : 0,
-                    max_mv: maxmvEl ? parseInt(maxmvEl.value) : 0,
-                    min_kpa: minkpaEl ? parseFloat(minkpaEl.value) : 0.0,
-                    max_kpa: maxkpaEl ? parseFloat(maxkpaEl.value) : 0.0,
-                    pressure_unit: punitEl ? parseInt(punitEl.value) : 0
-                };
+                if (config.channels[i].type === 1) {
+                    const ntcEl = getFormElem(`ntc${i}`);
+                    config.channels[i].params.ntc = { table_id: ntcEl ? parseInt(ntcEl.value) : 0 };
+                } else if (config.channels[i].type === 2) {
+                    const minmvEl = getFormElem(`pminmv${i}`);
+                    const maxmvEl = getFormElem(`pmaxmv${i}`);
+                    const minkpaEl = getFormElem(`pminkpa${i}`);
+                    const maxkpaEl = getFormElem(`pmaxkpa${i}`);
+                    const punitEl = getFormElem(`punit${i}`);
+                    // Prefer canonical kPa stored in data attribute (set when table is filled)
+                    let min_kpa_value = 0.0;
+                    let max_kpa_value = 0.0;
+                    const unitIdx = punitEl ? parseInt(punitEl.value) : 0;
+                    if (minkpaEl) {
+                        if (minkpaEl.dataset && typeof minkpaEl.dataset.kpa !== 'undefined' && minkpaEl.dataset.kpa !== '') {
+                            min_kpa_value = parseFloat(minkpaEl.dataset.kpa);
+                        } else {
+                            min_kpa_value = !isNaN(parseFloat(minkpaEl.value)) ? convertUnitToKpa(parseFloat(minkpaEl.value), unitIdx) : 0.0;
+                        }
+                    }
+                    if (maxkpaEl) {
+                        if (maxkpaEl.dataset && typeof maxkpaEl.dataset.kpa !== 'undefined' && maxkpaEl.dataset.kpa !== '') {
+                            max_kpa_value = parseFloat(maxkpaEl.dataset.kpa);
+                        } else {
+                            max_kpa_value = !isNaN(parseFloat(maxkpaEl.value)) ? convertUnitToKpa(parseFloat(maxkpaEl.value), unitIdx) : 0.0;
+                        }
+                    }
+                    config.channels[i].params.pressure = {
+                        min_mv: minmvEl ? parseInt(minmvEl.value) : 0,
+                        max_mv: maxmvEl ? parseInt(maxmvEl.value) : 0,
+                        min_kpa: min_kpa_value,
+                        max_kpa: max_kpa_value,
+                        pressure_unit: punitEl ? parseInt(punitEl.value) : 0
+                    };
             }
         }
         try {
