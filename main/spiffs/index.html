@@ -229,13 +229,14 @@
     function convertKpaToUnit(kpa, unit) {
         if (kpa === null || typeof kpa === 'undefined' || isNaN(parseFloat(kpa))) return '';
         kpa = parseFloat(kpa);
+        // Inputs must display integer values only (no decimals)
         switch (unit) {
             case 1: // bar
-                return (kpa / 100.0).toFixed(2);
+                return Math.round(kpa / 100.0).toString();
             case 2: // psi
-                return (kpa / 6.89476).toFixed(2);
+                return Math.round(kpa / 6.89476).toString();
             default: // kPa
-                return kpa.toFixed(2);
+                return Math.round(kpa).toString();
         }
     }
 
@@ -340,13 +341,13 @@
             </td>
             <td>
                 <div class="input-container">
-                    <div class="input-box"><input name="pminkpa${idx}" class="no-spin" type="number" step="0.01" value="${(ch.params && ch.params.pressure && typeof ch.params.pressure.min_kpa !== 'undefined') ? ch.params.pressure.min_kpa : ''}" ${isPressure ? '' : 'disabled'}></div>
+                        <div class="input-box"><input name="pminkpa${idx}" class="no-spin" type="number" step="1" value="${(ch.params && ch.params.pressure && typeof ch.params.pressure.min_kpa !== 'undefined') ? ch.params.pressure.min_kpa : ''}" ${isPressure ? '' : 'disabled'}></div>
                     <div class="unit">kPa</div>
                 </div>
             </td>
             <td>
                 <div class="input-container">
-                    <div class="input-box"><input name="pmaxkpa${idx}" class="no-spin" type="number" step="0.01" value="${(ch.params && ch.params.pressure && typeof ch.params.pressure.max_kpa !== 'undefined') ? ch.params.pressure.max_kpa : ''}" ${isPressure ? '' : 'disabled'}></div>
+                    <div class="input-box"><input name="pmaxkpa${idx}" class="no-spin" type="number" step="1" value="${(ch.params && ch.params.pressure && typeof ch.params.pressure.max_kpa !== 'undefined') ? ch.params.pressure.max_kpa : ''}" ${isPressure ? '' : 'disabled'}></div>
                     <div class="unit">kPa</div>
                 </div>
             </td>
@@ -469,12 +470,35 @@
                     if (!isNaN(parseFloat(this.value))) this.dataset.kpa = convertUnitToKpa(this.value, unit);
                     else this.dataset.kpa = '';
                 };
+                pminEl.onblur = function() {
+                    const unit = punitSel ? parseInt(punitSel.value) : 0;
+                    const v = parseFloat(this.value);
+                    if (!isNaN(v)) {
+                        // Enforce integer display for input fields
+                        this.value = Math.round(v).toString();
+                        this.dataset.kpa = convertUnitToKpa(this.value, unit);
+                    } else {
+                        this.dataset.kpa = '';
+                        this.value = '';
+                    }
+                };
             }
             if (pmaxEl) {
                 pmaxEl.oninput = function() {
                     const unit = punitSel ? parseInt(punitSel.value) : 0;
                     if (!isNaN(parseFloat(this.value))) this.dataset.kpa = convertUnitToKpa(this.value, unit);
                     else this.dataset.kpa = '';
+                };
+                pmaxEl.onblur = function() {
+                    const unit = punitSel ? parseInt(punitSel.value) : 0;
+                    const v = parseFloat(this.value);
+                    if (!isNaN(v)) {
+                        this.value = Math.round(v).toString();
+                        this.dataset.kpa = convertUnitToKpa(this.value, unit);
+                    } else {
+                        this.dataset.kpa = '';
+                        this.value = '';
+                    }
                 };
             }
             updateUnitLabel(i);
@@ -483,6 +507,27 @@
 
     function unitTextFromIndex(u) {
         return ['kPa', 'bar', 'psi'][u] || 'kPa';
+    }
+
+    function formatComputedValue(valueStr, idx) {
+        if (!valueStr || typeof valueStr !== 'string') return '';
+        const ch = (config && config.channels && config.channels[idx]) ? config.channels[idx] : null;
+        const type = ch ? ch.type : null;
+        const m = valueStr.match(/^(-?\d+(?:\.\d+)?)/);
+        if (!m) return valueStr;
+        const num = parseFloat(m[0]);
+        const rest = valueStr.substring(m[0].length).trim();
+        if (type === 2) { // Pressure
+            const unitIdx = (ch.params && ch.params.pressure) ? ch.params.pressure.pressure_unit : 0;
+            if (unitIdx === 1 || unitIdx === 2) {
+                return num.toFixed(2) + (rest ? ' ' + rest : '');
+            } else {
+                return Math.round(num).toString() + (rest ? ' ' + rest : '');
+            }
+        } else if (type === 1) { // NTC
+            return Math.round(num).toString() + (rest ? ' ' + rest : '');
+        }
+        return valueStr;
     }
 
     function updateUnitLabel(i) {
@@ -514,11 +559,14 @@
             const kpaVal = (kminInput.dataset && typeof kminInput.dataset.kpa !== 'undefined' && kminInput.dataset.kpa !== '') ? parseFloat(kminInput.dataset.kpa) : (parseFloat(kminInput.value) || 0);
             const display = convertKpaToUnit(kpaVal, unitIndex);
             kminInput.value = display;
+            // Use integer step for kPa, fractional for bar/psi
+            kminInput.step = '1';
         }
         if (kmaxInput) {
             const kpaVal = (kmaxInput.dataset && typeof kmaxInput.dataset.kpa !== 'undefined' && kmaxInput.dataset.kpa !== '') ? parseFloat(kmaxInput.dataset.kpa) : (parseFloat(kmaxInput.value) || 0);
             const display = convertKpaToUnit(kpaVal, unitIndex);
             kmaxInput.value = display;
+            kmaxInput.step = '1';
         }
     }
 
@@ -582,7 +630,7 @@
                 if (valueEl) {
                     const cv = computed && Array.isArray(computed.channels) ? computed.channels[i] : null;
                     if (cv && typeof cv.value === 'string') {
-                        valueEl.textContent = cv.value;
+                        valueEl.textContent = formatComputedValue(cv.value, i);
                     } else {
                         valueEl.textContent = '';
                     }
