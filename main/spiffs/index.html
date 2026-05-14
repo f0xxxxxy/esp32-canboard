@@ -140,7 +140,7 @@
     </style>
 </head>
 <body>
-    <form id="config-form">
+    <form id="config-form" novalidate>
     <div class="header-row">
         <h2>CANBoard Configuration</h2>
         <div class="top-actions">
@@ -226,10 +226,10 @@
     // Unit conversion helpers: UI displays values in the selected unit
     // but configuration is stored canonically in kPa. Use these helpers
     // to convert between kPa <-> bar/psi for display and saving.
+    // Display: integers for all units (UI shows integer values only).
     function convertKpaToUnit(kpa, unit) {
         if (kpa === null || typeof kpa === 'undefined' || isNaN(parseFloat(kpa))) return '';
         kpa = parseFloat(kpa);
-        // Inputs must display integer values only (no decimals)
         switch (unit) {
             case 1: // bar
                 return Math.round(kpa / 100.0).toString();
@@ -391,6 +391,9 @@
                 if (isNaN(minmv) || isNaN(maxmv) || minmv >= maxmv) error += `Channel ${i+1}: Pressure mV min/max invalid. `;
                 if (minmv < 0 || minmv > 5000 || maxmv < 0 || maxmv > 5000) error += `Channel ${i+1}: Pressure mV must be 0-5000. `;
                 if (isNaN(minkpa) || isNaN(maxkpa) || minkpa >= maxkpa) error += `Channel ${i+1}: Pressure kPa min/max invalid. `;
+                // Enforce integer-only values for displayed pressure fields
+                if (!isNaN(minkpa) && !Number.isInteger(minkpa)) error += `Channel ${i+1}: Pressure min must be integer. `;
+                if (!isNaN(maxkpa) && !Number.isInteger(maxkpa)) error += `Channel ${i+1}: Pressure max must be integer. `;
                 const lvlEl = getFormElem(`filtering${i}`);
                 const lvl = lvlEl ? parseInt(lvlEl.value) : NaN;
                 if (isNaN(lvl) || lvl < 0 || lvl > 3) error += `Channel ${i+1}: Filter level invalid. `;
@@ -474,7 +477,7 @@
                     const unit = punitSel ? parseInt(punitSel.value) : 0;
                     const v = parseFloat(this.value);
                     if (!isNaN(v)) {
-                        // Enforce integer display for input fields
+                        // Always display integer values
                         this.value = Math.round(v).toString();
                         this.dataset.kpa = convertUnitToKpa(this.value, unit);
                     } else {
@@ -493,6 +496,7 @@
                     const unit = punitSel ? parseInt(punitSel.value) : 0;
                     const v = parseFloat(this.value);
                     if (!isNaN(v)) {
+                        // Always display integer values
                         this.value = Math.round(v).toString();
                         this.dataset.kpa = convertUnitToKpa(this.value, unit);
                     } else {
@@ -559,7 +563,7 @@
             const kpaVal = (kminInput.dataset && typeof kminInput.dataset.kpa !== 'undefined' && kminInput.dataset.kpa !== '') ? parseFloat(kminInput.dataset.kpa) : (parseFloat(kminInput.value) || 0);
             const display = convertKpaToUnit(kpaVal, unitIndex);
             kminInput.value = display;
-            // Use integer step for kPa, fractional for bar/psi
+            // Always use integer step
             kminInput.step = '1';
         }
         if (kmaxInput) {
