@@ -71,7 +71,7 @@ Receivers should interpret all measurement values as little-endian uint16s unles
 Example DBC for signal names and scaling: [dbc/esp32-canboard.dbc](dbc/esp32-canboard.dbc)
 
 ## Schematic
-[View PDF](docs/esp32-canboard-schematic.pdf)
+[View PDF](hardware/esp32-canboard-schematic.pdf)
 
 ## Images
 ![esp32-canboard-iso](docs/esp32-canboard-iso.png)
