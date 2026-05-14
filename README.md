@@ -109,3 +109,7 @@ Example DBC for signal names and scaling: [dbc/esp32-canboard.dbc](dbc/esp32-can
 |24|Input 15||
 |25|Input 16||
 |26|Ground||
+
+## Disclaimer
+
+This product has been designed by a hobbyist, not a professional. Users should operate the product at their own discretion and risk. It is intended for testing and off-road use only. The designer explicitly disclaims any responsibility for damage or injury that may result from the use of this product.
