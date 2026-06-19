@@ -6,7 +6,7 @@
 
 #define CONFIG_CHANNELS 10       ///< Number of ADC input channels
 #define CONFIG_NAME_LEN 32      ///< Maximum characters for channel name
-#define CONFIG_VERSION 3        ///< Configuration structure version number (increment for new fields or layout changes)
+#define CONFIG_VERSION 4        ///< Configuration structure version number (increment for new fields or layout changes)
 
 /// Per-channel median filter strength levels
 /// stored in the 8‑bit `filtering` field below.
@@ -17,6 +17,18 @@ typedef enum {
     FILTER_MED  = 2,
     FILTER_HIGH = 3
 } filter_level_t;
+
+typedef enum {
+    EMUB_TX_DISABLED = 0,
+    EMUB_TX_CAN_ANALOG_9 = 1,
+    EMUB_TX_CAN_ANALOG_10 = 2,
+    EMUB_TX_CAN_ANALOG_11 = 3,
+    EMUB_TX_CAN_ANALOG_12 = 4,
+    EMUB_TX_CAN_ANALOG_13 = 5,
+    EMUB_TX_CAN_ANALOG_14 = 6,
+    EMUB_TX_CAN_ANALOG_15 = 7,
+    EMUB_TX_CAN_ANALOG_16 = 8
+} emub_tx_t;
 
 /// Sensor measurement types for ADC channels
 typedef enum {
@@ -31,6 +43,7 @@ typedef struct {
     uint32_t pullup_ohms;       ///< Optional pullup resistor value in ohms (0 if not present)
     sensor_type_t type;         ///< Sensor type (RAW, NTC, PRESSURE)
     uint8_t filtering;          ///< Median filter level (see filter_level_t enum; 0=none)
+    uint8_t emub_tx;            ///< Optional EMUB TX mapping 0=Disabled, 1..8 => CAN Analog 9..16
     union {
         struct { ///< NTC thermistor configuration
             uint8_t table_id;   ///< Reference table index for NTC lookup

@@ -251,8 +251,9 @@ esp_err_t config_post_handler(httpd_req_t *req) {
         cJSON *pullup = cJSON_GetObjectItem(ch, "pullup_ohms");
         cJSON *type = cJSON_GetObjectItem(ch, "type");
         cJSON *filtering = cJSON_GetObjectItem(ch, "filtering");
+        cJSON *emub_tx = cJSON_GetObjectItem(ch, "emub_tx");
         
-        if (!cJSON_IsString(name) || !cJSON_IsNumber(pullup) || !cJSON_IsNumber(type)) {
+        if (!cJSON_IsString(name) || !cJSON_IsNumber(pullup) || !cJSON_IsNumber(type) || !cJSON_IsNumber(emub_tx)) {
             ESP_LOGW(TAG, "Invalid channel fields at index %d", i);
             cJSON_Delete(root);
             httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid channel fields");
@@ -270,6 +271,10 @@ esp_err_t config_post_handler(httpd_req_t *req) {
             cfg.channels[i].filtering = (uint8_t)lvl;
         } else {
             cfg.channels[i].filtering = FILTER_NONE;
+        }
+        cfg.channels[i].emub_tx = (uint8_t)emub_tx->valueint;
+        if (cfg.channels[i].emub_tx > EMUB_TX_CAN_ANALOG_16) {
+            cfg.channels[i].emub_tx = EMUB_TX_DISABLED;
         }
         
         cJSON *params = cJSON_GetObjectItem(ch, "params");
@@ -342,6 +347,21 @@ esp_err_t config_post_handler(httpd_req_t *req) {
     cJSON *pullup_vref = cJSON_GetObjectItem(root, "pullup_vref_mv");
     if (pullup_vref && cJSON_IsNumber(pullup_vref)) {
         cfg.pullup_vref_mv = (uint16_t)pullup_vref->valueint;
+    }
+
+    // Validate unique EMUB TX assignments
+    bool emub_seen[EMUB_TX_CAN_ANALOG_16 + 1] = { false };
+    for (int i = 0; i < CONFIG_CHANNELS; ++i) {
+        if (cfg.channels[i].emub_tx > EMUB_TX_DISABLED) {
+            if (emub_seen[cfg.channels[i].emub_tx]) {
+                ESP_LOGW(TAG, "Duplicate EMUB TX assignment: %u", cfg.channels[i].emub_tx);
+                cJSON_Delete(root);
+                free(buf);
+                httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Duplicate EMUB TX assignment");
+                return ESP_FAIL;
+            }
+            emub_seen[cfg.channels[i].emub_tx] = true;
+        }
     }
 
     cJSON_Delete(root);
@@ -542,12 +562,13 @@ esp_err_t config_export_get_handler(httpd_req_t *req) {
 
     for (int i = 0; i < CONFIG_CHANNELS; ++i) {
         json_pos += snprintf(json + json_pos, json_max - json_pos,
-            "%s{\"name\":\"%s\",\"pullup_ohms\":%lu,\"type\":%u,\"filtering\":%d,\"params\":{",
+            "%s{\"name\":\"%s\",\"pullup_ohms\":%lu,\"type\":%u,\"filtering\":%d,\"emub_tx\":%u,\"params\":{",
             i ? "," : "",
             cfg.channels[i].name,
             (unsigned long)cfg.channels[i].pullup_ohms,
             cfg.channels[i].type,
-            cfg.channels[i].filtering);
+            cfg.channels[i].filtering,
+            cfg.channels[i].emub_tx);
 
         if (cfg.channels[i].type == SENSOR_NTC) {
             json_pos += snprintf(json + json_pos, json_max - json_pos,

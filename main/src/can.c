@@ -226,6 +226,27 @@ void canTransmit(void *arg)
         if (err != ESP_OK) {
             ESP_LOGW(can_log, "Failed to transmit dynamic msg5: %s", esp_err_to_name(err));
         }
+
+        bool any_emub = false;
+        uint8_t emub_bytes[8] = {0};
+        for (int i = 0; i < 10; ++i) {
+            if (board_cfg.channels[i].emub_tx > EMUB_TX_DISABLED && board_cfg.channels[i].emub_tx <= EMUB_TX_CAN_ANALOG_16) {
+                uint32_t scaled = ((uint32_t)voltages_copy[i] * 5 + 49) / 98; // 19.6 mV per count
+                if (scaled > 255) scaled = 255;
+                emub_bytes[board_cfg.channels[i].emub_tx - 1] = (uint8_t)scaled;
+                any_emub = true;
+            }
+        }
+
+        if (any_emub) {
+            twai_message_t emub_msg = init_twai_message(0x66B);
+            memcpy(emub_msg.data, emub_bytes, sizeof(emub_bytes));
+            err = twai_transmit(&emub_msg, pdMS_TO_TICKS(1000));
+            if (err != ESP_OK) {
+                ESP_LOGW(can_log, "Failed to transmit EMUB TX msg: %s", esp_err_to_name(err));
+            }
+        }
+
         vTaskDelay(pdMS_TO_TICKS(20));
     }
     vTaskDelete(NULL);
