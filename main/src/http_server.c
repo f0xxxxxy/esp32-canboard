@@ -157,12 +157,13 @@ esp_err_t config_get_handler(httpd_req_t *req) {
     
     for (int i = 0; i < CONFIG_CHANNELS; ++i) {
         json_pos += snprintf(json + json_pos, json_max - json_pos,
-            "%s{\"name\":\"%s\",\"pullup_ohms\":%lu,\"type\":%u,\"filtering\":%d,\"params\":{",
+            "%s{\"name\":\"%s\",\"pullup_ohms\":%lu,\"type\":%u,\"filtering\":%d,\"emub_tx\":%u,\"params\":{",
             i ? "," : "",
             cfg.channels[i].name,
             (unsigned long)cfg.channels[i].pullup_ohms,
             cfg.channels[i].type,
-            cfg.channels[i].filtering);
+            cfg.channels[i].filtering,
+            cfg.channels[i].emub_tx);
             
         if (cfg.channels[i].type == SENSOR_NTC) {
             const ntc_table_def_t* table = ntc_get_table(cfg.channels[i].params.ntc.table_id);
@@ -658,8 +659,9 @@ esp_err_t config_import_post_handler(httpd_req_t *req) {
         cJSON *pullup = cJSON_GetObjectItem(ch, "pullup_ohms");
         cJSON *type = cJSON_GetObjectItem(ch, "type");
         cJSON *filtering = cJSON_GetObjectItem(ch, "filtering");
+        cJSON *emub_tx = cJSON_GetObjectItem(ch, "emub_tx");
 
-        if (!cJSON_IsString(name) || !cJSON_IsNumber(pullup) || !cJSON_IsNumber(type)) {
+        if (!cJSON_IsString(name) || !cJSON_IsNumber(pullup) || !cJSON_IsNumber(type) || !cJSON_IsNumber(emub_tx)) {
             ESP_LOGW(TAG, "Invalid channel fields at index %d", i);
             cJSON_Delete(root);
             free(buf);
@@ -671,6 +673,10 @@ esp_err_t config_import_post_handler(httpd_req_t *req) {
         cfg.channels[i].name[CONFIG_NAME_LEN - 1] = 0;
         cfg.channels[i].pullup_ohms = (uint32_t)pullup->valueint;
         cfg.channels[i].type = (sensor_type_t)type->valueint;
+        cfg.channels[i].emub_tx = (uint8_t)emub_tx->valueint;
+        if (cfg.channels[i].emub_tx > EMUB_TX_CAN_ANALOG_16) {
+            cfg.channels[i].emub_tx = EMUB_TX_DISABLED;
+        }
         if (filtering && cJSON_IsNumber(filtering)) {
             int lvl = filtering->valueint;
             if (lvl < FILTER_NONE) lvl = FILTER_NONE;

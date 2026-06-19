@@ -458,6 +458,7 @@
             config.channels[i].pullup_ohms = parseInt(form[`pullup${i}`].value);
             config.channels[i].type = parseInt(form[`type${i}`].value);
             config.channels[i].filtering = parseInt(form[`filtering${i}`].value);
+            config.channels[i].emub_tx = parseInt(form[`emubtx${i}`].value) || 0;
             config.channels[i].params = {};
             if (config.channels[i].type === 1) {
                 config.channels[i].params.ntc = { table_id: parseInt(form[`ntc${i}`].value) };
