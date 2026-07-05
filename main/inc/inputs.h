@@ -90,7 +90,8 @@ uint16_t medianFilterHelper(uint16_t *samples, int count);
 
 /// @brief FreeRTOS task for ADC acquisition and processing
 /// Runs on Core 1, continuously reads all ADC channels with median filtering,
-/// applies dynamic scaling based on per-channel pullup configuration, and updates filtered_voltages[].
+/// converts ADC readings back to pin voltage using the fixed on-board 4k7/10k divider,
+/// and updates filtered_voltages[].
 /// @param arg Unused FreeRTOS task parameter
 void adcProcess(void *arg);
 

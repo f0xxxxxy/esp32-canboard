@@ -291,8 +291,7 @@ uint16_t medianFilterHelper(uint16_t *samples, int count) {
  * @note This function should be spawned as a FreeRTOS task using xTaskCreatePinnedToCore().
  *       Runs in infinite loop until task is deleted.
  *       Updates global filtered_voltages[] array (protected by filtered_voltages_mutex).
- *       Scaling formula: (pullup_ohms + 14.7k) / 14.7k when pullup present
- *       Scaling formula: 14.7k / 10k = 1.47 when no pullup
+ *       Scaling formula: 14.7k / 10k = 1.47 (fixed board divider only)
  *       Loop timing: ~10 ms between complete channel cycles
  *
  * @see filtered_voltages, filtered_voltages_mutex, board_cfg.channels[].filtering
@@ -301,16 +300,13 @@ void adcProcess(void *arg) {
     ESP_LOGI(adc_log, "ADC Processing Task Started");
     // allocate buffer using maximum possible depth
     uint16_t samples[FILTER_DEPTH_MAX];
+    const float pin_voltage_scaling = (float)DIVIDER_TOTAL_OHM / DIVIDER_LOW_OHM;
     
     while (1) {
         for (int ch = ADC_CHANNEL_START; ch <= ADC_CHANNEL_END; ch++) {
-            // Calculate scaling factor dynamically from pullup resistor
-            float scaling = (float)DIVIDER_TOTAL_OHM / DIVIDER_LOW_OHM;  // Base divider: 14.7k / 10k = 1.47
-            
-            if (board_cfg.channels[ch].pullup_ohms > 0) {
-                // Include pullup in series resistance calculation
-                scaling = ((float)board_cfg.channels[ch].pullup_ohms + DIVIDER_TOTAL_OHM) / DIVIDER_TOTAL_OHM;
-            }
+            // Always convert ADC back to the physical pin voltage using
+            // only the fixed on-board divider (4k7/10k).
+            float scaling = pin_voltage_scaling;
             
             // determine filtering depth based on configured level
             switch (board_cfg.channels[ch].filtering) {
