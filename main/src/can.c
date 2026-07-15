@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include <string.h>
 #include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "freertos/semphr.h"
 #include "esp_log.h"
 #include "driver/twai.h"
@@ -92,8 +93,8 @@ esp_err_t can_init(void) {
  * @note Runs in infinite loop until task is deleted.
  *       Protected access to filtered_voltages array via mutex.
  *       All CAN transmit failures are logged as warnings (non-fatal).
- *       Message timing: ~1-2ms per message, 20ms inter-cycle delay (total ~25ms = 40Hz capability)
- *       Actual transmission frequency: 20Hz (50ms cycle time)
+ *       Message timing: ~1-2ms spacing between messages in a cycle.
+ *       Overall loop cadence is configurable via board_cfg.can_tx_hz (25 or 50 Hz).
  */
 void canTransmit(void *arg)
 {
@@ -101,6 +102,8 @@ void canTransmit(void *arg)
     extern const uint8_t FIRMWARE_REVISION;
     
     while(1) {
+        TickType_t loop_start = xTaskGetTickCount();
+        uint8_t can_tx_hz_snapshot = board_cfg.can_tx_hz;
         uint16_t voltages_copy[NUM_ADC_CHANNELS];
         int8_t cpu_temp = 0;
         
@@ -247,7 +250,13 @@ void canTransmit(void *arg)
             }
         }
 
-        vTaskDelay(pdMS_TO_TICKS(20));
+        TickType_t target_period_ticks = pdMS_TO_TICKS((can_tx_hz_snapshot == 50) ? 20 : 40);
+        TickType_t elapsed_ticks = xTaskGetTickCount() - loop_start;
+        if (elapsed_ticks < target_period_ticks) {
+            vTaskDelay(target_period_ticks - elapsed_ticks);
+        } else {
+            taskYIELD();
+        }
     }
     vTaskDelete(NULL);
 }

@@ -151,9 +151,9 @@ esp_err_t config_get_handler(httpd_req_t *req) {
     size_t json_pos = 0;
     const size_t json_max = 4096;
     
-    // Start JSON object including CAN speed, base ID and pull-up Vref
-    json_pos += snprintf(json + json_pos, json_max - json_pos, "{\"can_speed_kbps\":%lu,\"can_start_id\":%lu,\"pullup_vref_mv\":%u,\"channels\":[",
-        (unsigned long)cfg.can_speed_kbps, (unsigned long)cfg.can_start_id, (unsigned)cfg.pullup_vref_mv);
+    // Start JSON object including CAN speed, base ID, TX rate and pull-up Vref
+    json_pos += snprintf(json + json_pos, json_max - json_pos, "{\"can_speed_kbps\":%lu,\"can_start_id\":%lu,\"can_tx_hz\":%u,\"pullup_vref_mv\":%u,\"channels\":[",
+        (unsigned long)cfg.can_speed_kbps, (unsigned long)cfg.can_start_id, (unsigned)cfg.can_tx_hz, (unsigned)cfg.pullup_vref_mv);
     
     for (int i = 0; i < CONFIG_CHANNELS; ++i) {
         json_pos += snprintf(json + json_pos, json_max - json_pos,
@@ -343,6 +343,12 @@ esp_err_t config_post_handler(httpd_req_t *req) {
                 cfg.can_start_id = (uint32_t)strtoul(s, NULL, 0);
             }
         }
+    }
+
+    cJSON *can_tx_hz = cJSON_GetObjectItem(root, "can_tx_hz");
+    if (can_tx_hz && cJSON_IsNumber(can_tx_hz)) {
+        uint32_t requested_hz = (uint32_t)can_tx_hz->valueint;
+        cfg.can_tx_hz = (requested_hz == 50) ? 50 : 25;
     }
 
     cJSON *pullup_vref = cJSON_GetObjectItem(root, "pullup_vref_mv");
@@ -558,8 +564,8 @@ esp_err_t config_export_get_handler(httpd_req_t *req) {
 
     size_t json_pos = 0;
     const size_t json_max = 4096;
-    json_pos += snprintf(json + json_pos, json_max - json_pos, "{\"can_speed_kbps\":%lu,\"can_start_id\":%lu,\"pullup_vref_mv\":%u,\"channels\":[",
-        (unsigned long)cfg.can_speed_kbps, (unsigned long)cfg.can_start_id, (unsigned)cfg.pullup_vref_mv);
+    json_pos += snprintf(json + json_pos, json_max - json_pos, "{\"can_speed_kbps\":%lu,\"can_start_id\":%lu,\"can_tx_hz\":%u,\"pullup_vref_mv\":%u,\"channels\":[",
+        (unsigned long)cfg.can_speed_kbps, (unsigned long)cfg.can_start_id, (unsigned)cfg.can_tx_hz, (unsigned)cfg.pullup_vref_mv);
 
     for (int i = 0; i < CONFIG_CHANNELS; ++i) {
         json_pos += snprintf(json + json_pos, json_max - json_pos,
@@ -754,6 +760,12 @@ esp_err_t config_import_post_handler(httpd_req_t *req) {
                 cfg.can_start_id = (uint32_t)strtoul(s, NULL, 0);
             }
         }
+    }
+
+    cJSON *can_tx_hz = cJSON_GetObjectItem(root, "can_tx_hz");
+    if (can_tx_hz && cJSON_IsNumber(can_tx_hz)) {
+        uint32_t requested_hz = (uint32_t)can_tx_hz->valueint;
+        cfg.can_tx_hz = (requested_hz == 50) ? 50 : 25;
     }
 
     cJSON *pullup_vref = cJSON_GetObjectItem(root, "pullup_vref_mv");
