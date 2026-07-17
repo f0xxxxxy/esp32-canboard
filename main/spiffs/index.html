@@ -153,6 +153,12 @@
                     <option value="1000">1000kbps</option>
                 </select>
 
+                <label for="can-tx-rate">CAN TX:</label>
+                <select id="can-tx-rate" name="can_tx_hz" class="small-select">
+                    <option value="25">25Hz</option>
+                    <option value="50">50Hz</option>
+                </select>
+
                 <label for="base-can-id">Base CAN ID:</label>
                 <div style="display:flex; align-items:center;">
                     <span class="hex-prefix">0x</span>
@@ -580,6 +586,8 @@
         fillTable();
         // Set CAN speed dropdown
         document.getElementById('can-speed').value = config.can_speed_kbps || 500;
+        // Set CAN TX rate dropdown
+        document.getElementById('can-tx-rate').value = (config.can_tx_hz === 50) ? 50 : 25;
         // Set base CAN ID (show hex without 0x prefix)
         const baseElem = document.getElementById('base-can-id');
         if (config.can_start_id !== undefined) {
@@ -652,6 +660,7 @@
         if (error) { setStatus(error, true); return; }
         // Build config object
         config.can_speed_kbps = parseInt(document.getElementById('can-speed').value);
+        config.can_tx_hz = (parseInt(document.getElementById('can-tx-rate').value) === 50) ? 50 : 25;
         // Read base CAN ID from hex input (allow decimal as fallback)
         const baseVal = document.getElementById('base-can-id').value.trim();
         if (/^0x/i.test(baseVal)) {

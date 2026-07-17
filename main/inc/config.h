@@ -6,7 +6,7 @@
 
 #define CONFIG_CHANNELS 16       ///< Number of ADC input channels.
 #define CONFIG_NAME_LEN 32       ///< Maximum characters for channel name.
-#define CONFIG_VERSION 5         ///< Configuration structure version number.
+#define CONFIG_VERSION 6         ///< Configuration structure version number.
 
 /** @brief Pressure units selectable in UI and stored per-channel. */
 typedef enum {
@@ -61,6 +61,7 @@ typedef struct {
     uint32_t version;                      ///< Config version for migration/compatibility.
     uint32_t can_start_id;                 ///< CAN message ID base (incremented for each message).
     uint32_t can_speed_kbps;               ///< CAN bus speed (125, 250, 500, or 1000 kbps).
+    uint8_t can_tx_hz;                     ///< CAN transmit loop rate in Hz (supported: 25 or 50).
     channel_config_t channels[CONFIG_CHANNELS]; ///< Per-channel configuration array.
     uint32_t crc32;                        ///< CRC32 checksum of all fields above.
 } board_config_t;

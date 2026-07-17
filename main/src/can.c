@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include <string.h>
 #include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "freertos/semphr.h"
 #include "esp_log.h"
 #include "esp_twai.h"
@@ -69,8 +70,6 @@ esp_err_t can_init(void) {
 void canTransmit(void *arg)
 {
     ESP_LOGI(can_log, "CAN Transmit Task Started");
-    TickType_t last_wake = xTaskGetTickCount();
-    const TickType_t tx_period = pdMS_TO_TICKS(40); // 25 Hz
 
     uint32_t base_id = board_cfg.can_start_id;
     if (base_id == 0 || base_id > 0x7F8) {
@@ -86,6 +85,8 @@ void canTransmit(void *arg)
     }
 
     while (1) {
+        TickType_t loop_start = xTaskGetTickCount();
+        uint8_t can_tx_hz_snapshot = board_cfg.can_tx_hz;
         uint16_t voltages_copy[NUM_ANALOG_INPUTS] = {0};
 
         if (xSemaphoreTake(filtered_voltages_mutex, pdMS_TO_TICKS(5)) == pdTRUE) {
@@ -164,6 +165,12 @@ void canTransmit(void *arg)
             vTaskDelay(pdMS_TO_TICKS(1));
         }
 
-        vTaskDelayUntil(&last_wake, tx_period);
+        TickType_t target_period_ticks = pdMS_TO_TICKS((can_tx_hz_snapshot == 50) ? 20 : 40);
+        TickType_t elapsed_ticks = xTaskGetTickCount() - loop_start;
+        if (elapsed_ticks < target_period_ticks) {
+            vTaskDelay(target_period_ticks - elapsed_ticks);
+        } else {
+            taskYIELD();
+        }
     }
 }

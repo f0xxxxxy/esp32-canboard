@@ -167,9 +167,9 @@ esp_err_t config_get_handler(httpd_req_t *req) {
     size_t json_pos = 0;
     const size_t json_max = 4096;
     
-    // Start JSON object including config version, CAN speed and base ID
-    json_pos += snprintf(json + json_pos, json_max - json_pos, "{\"version\":%u,\"can_speed_kbps\":%lu,\"can_start_id\":%lu,\"channels\":[",
-        (unsigned int)CONFIG_VERSION, (unsigned long)cfg.can_speed_kbps, (unsigned long)cfg.can_start_id);
+    // Start JSON object including config version, CAN speed, base ID and TX rate
+    json_pos += snprintf(json + json_pos, json_max - json_pos, "{\"version\":%u,\"can_speed_kbps\":%lu,\"can_start_id\":%lu,\"can_tx_hz\":%u,\"channels\":[",
+        (unsigned int)CONFIG_VERSION, (unsigned long)cfg.can_speed_kbps, (unsigned long)cfg.can_start_id, (unsigned int)cfg.can_tx_hz);
     
     for (int i = 0; i < CONFIG_CHANNELS; ++i) {
         json_pos += snprintf(json + json_pos, json_max - json_pos,
@@ -390,6 +390,12 @@ esp_err_t config_post_handler(httpd_req_t *req) {
         }
     }
 
+    cJSON *can_tx_hz = cJSON_GetObjectItem(root, "can_tx_hz");
+    if (can_tx_hz && cJSON_IsNumber(can_tx_hz)) {
+        uint32_t requested_hz = (uint32_t)can_tx_hz->valueint;
+        cfg.can_tx_hz = (requested_hz == 50) ? 50 : 25;
+    }
+
     // Note: pullup_vref_mv is no longer provided by UI/config; V5 rail is measured live
 
     cJSON_Delete(root);
@@ -596,8 +602,8 @@ esp_err_t config_export_get_handler(httpd_req_t *req) {
 
     size_t json_pos = 0;
     const size_t json_max = 4096;
-    json_pos += snprintf(json + json_pos, json_max - json_pos, "{\"version\":%u,\"can_speed_kbps\":%lu,\"can_start_id\":%lu,\"channels\":[",
-        (unsigned int)CONFIG_VERSION, (unsigned long)cfg.can_speed_kbps, (unsigned long)cfg.can_start_id);
+    json_pos += snprintf(json + json_pos, json_max - json_pos, "{\"version\":%u,\"can_speed_kbps\":%lu,\"can_start_id\":%lu,\"can_tx_hz\":%u,\"channels\":[",
+        (unsigned int)CONFIG_VERSION, (unsigned long)cfg.can_speed_kbps, (unsigned long)cfg.can_start_id, (unsigned int)cfg.can_tx_hz);
 
     for (int i = 0; i < CONFIG_CHANNELS; ++i) {
         json_pos += snprintf(json + json_pos, json_max - json_pos,
@@ -672,10 +678,17 @@ esp_err_t config_import_post_handler(httpd_req_t *req) {
         return ESP_FAIL;
     }
 
-    // Require explicit version match for imports (allow previous minor version for migration)
+    // Accept current and previous schema versions; treat missing version as previous legacy export.
     cJSON *ver = cJSON_GetObjectItem(root, "version");
-    if (!ver || !cJSON_IsNumber(ver) || ((uint32_t)ver->valueint != CONFIG_VERSION && (uint32_t)ver->valueint != (CONFIG_VERSION - 1))) {
-        ESP_LOGW(TAG, "Rejected import due to incompatible or missing version");
+    uint32_t import_version = CONFIG_VERSION - 1;
+    if (ver && cJSON_IsNumber(ver)) {
+        import_version = (uint32_t)ver->valueint;
+    } else {
+        ESP_LOGW(TAG, "Import JSON missing version, treating as legacy v%u", (unsigned int)(CONFIG_VERSION - 1));
+    }
+
+    if (import_version > CONFIG_VERSION || import_version < (CONFIG_VERSION - 1)) {
+        ESP_LOGW(TAG, "Rejected import due to incompatible version: %lu", (unsigned long)import_version);
         cJSON_Delete(root);
         free(buf);
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Unsupported config version");
@@ -805,6 +818,12 @@ esp_err_t config_import_post_handler(httpd_req_t *req) {
                 cfg.can_start_id = (uint32_t)strtoul(s, NULL, 0);
             }
         }
+    }
+
+    cJSON *can_tx_hz = cJSON_GetObjectItem(root, "can_tx_hz");
+    if (can_tx_hz && cJSON_IsNumber(can_tx_hz)) {
+        uint32_t requested_hz = (uint32_t)can_tx_hz->valueint;
+        cfg.can_tx_hz = (requested_hz == 50) ? 50 : 25;
     }
 
     // Ignore any pullup_vref_mv in imported JSON — V5 rail is measured at runtime

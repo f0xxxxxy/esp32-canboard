@@ -155,8 +155,20 @@ bool config_load(board_config_t *cfg) {
                 cfg->channels[i].params.pressure.pressure_unit = UNIT_KPA;
             }
         }
+        if (cfg->version < 6) {
+            cfg->can_tx_hz = 25;
+        }
         cfg->version = CONFIG_VERSION;
+        if (cfg->can_tx_hz != 25 && cfg->can_tx_hz != 50) {
+            cfg->can_tx_hz = 25;
+        }
         // update CRC and persist new layout immediately
+        cfg->crc32 = crc32(cfg, offsetof(board_config_t, crc32));
+        config_save(cfg);
+    }
+
+    if (cfg->can_tx_hz != 25 && cfg->can_tx_hz != 50) {
+        cfg->can_tx_hz = 25;
         cfg->crc32 = crc32(cfg, offsetof(board_config_t, crc32));
         config_save(cfg);
     }
@@ -197,6 +209,7 @@ void config_set_defaults(board_config_t *cfg) {
     cfg->version = CONFIG_VERSION;
     cfg->can_start_id = CAN_BASEID;
     cfg->can_speed_kbps = 500; // Default CAN speed 500 kbps
+    cfg->can_tx_hz = 25; // Default CAN transmit rate 25 Hz
     // V5 reference is measured live; no stored pullup_vref_mv
     
     for (int i = 0; i < CONFIG_CHANNELS; ++i) {
