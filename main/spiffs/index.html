@@ -227,7 +227,7 @@
     </div>
     <script>
     const SENSOR_TYPES = ["Raw", "NTC", "Pressure"];
-    const NTC_TABLES = ["Bosch 0280130026", "Bosch TMAP 0281002437", "Universal 1/8 NPT"];
+    const NTC_TABLES = ["Bosch 0280130026", "Bosch TMAP 0281002437", "Universal 1/8 NPT", "FAE 33166", "Bosch 0280130055"];
 
     // Unit conversion helpers: UI displays values in the selected unit
     // but configuration is stored canonically in kPa. Use these helpers
@@ -600,20 +600,32 @@
     async function refreshLiveValues() {
         try {
             const inputsRes = await fetch('/api/inputs', { cache: 'no-store' });
-            if (!inputsRes.ok) return;
+            if (!inputsRes.ok) {
+                throw new Error(`Inputs HTTP ${inputsRes.status}`);
+            }
 
             const live = await inputsRes.json();
-            if (!live || !Array.isArray(live.channels)) return;
+            if (!live || !Array.isArray(live.channels)) {
+                throw new Error('Inputs payload is invalid');
+            }
 
             let computed = null;
             try {
                 const valuesRes = await fetch('/api/live_values', { cache: 'no-store' });
                 if (valuesRes.ok) {
                     computed = await valuesRes.json();
+                    if (!computed || !Array.isArray(computed.channels)) {
+                        throw new Error('Computed payload is invalid');
+                    }
+                } else {
+                    console.warn(`Computed values HTTP ${valuesRes.status}`);
                 }
             } catch (e) {
                 // Keep showing vRef/voltages even if computed-value endpoint fails.
                 computed = null;
+                if (window.console && console.warn) {
+                    console.warn('computed /api/live_values failed:', e);
+                }
             }
 
             const v5elem = document.getElementById('v5-rail');
@@ -649,7 +661,19 @@
                 }
             }
         } catch (e) {
-            // Live update failures are non-fatal; keep current display values.
+            const v5elem = document.getElementById('v5-rail');
+            if (v5elem) v5elem.textContent = '-- mV';
+
+            for (let i = 0; i < 16; ++i) {
+                const voltageEl = document.getElementById(`live-voltage-${i}`);
+                const valueEl = document.getElementById(`live-value-${i}`);
+                if (voltageEl) voltageEl.textContent = '--';
+                if (valueEl) valueEl.textContent = '';
+            }
+
+            if (window.console && console.warn) {
+                console.warn('refreshLiveValues failed:', e);
+            }
         }
     }
 

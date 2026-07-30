@@ -493,7 +493,7 @@ esp_err_t live_values_get_handler(httpd_req_t *req) {
         xSemaphoreGive(filtered_voltages_mutex);
     }
 
-    char *json = malloc(2048);
+    char *json = malloc(4096);
     if (!json) {
         ESP_LOGE(TAG, "Failed to allocate live values JSON buffer");
         httpd_resp_send_500(req);
@@ -501,8 +501,15 @@ esp_err_t live_values_get_handler(httpd_req_t *req) {
     }
 
     size_t json_pos = 0;
-    const size_t json_max = 2048;
-    json_pos += snprintf(json + json_pos, json_max - json_pos, "{\"channels\":[");
+    const size_t json_max = 4096;
+    int written = snprintf(json + json_pos, json_max - json_pos, "{\"channels\":[");
+    if (written < 0 || (size_t)written >= (json_max - json_pos)) {
+        ESP_LOGE(TAG, "Failed to build live values JSON header");
+        free(json);
+        httpd_resp_send_500(req);
+        return ESP_FAIL;
+    }
+    json_pos += (size_t)written;
 
     for (int i = 0; i < CONFIG_CHANNELS; ++i) {
         float voltage_v = (float)voltages_copy[i] / 1000.0f;
@@ -525,7 +532,7 @@ esp_err_t live_values_get_handler(httpd_req_t *req) {
                 pressure_display = pressure_kpa / 6.89476f;
                 pressure_unit = "psi";
             }
-            json_pos += snprintf(json + json_pos, json_max - json_pos,
+            written = snprintf(json + json_pos, json_max - json_pos,
                 "%s{\"voltage_v\":%.2f,\"value\":\"%.2f %s\"}",
                 i ? "," : "", voltage_v, pressure_display, pressure_unit);
         } else if (board_cfg.channels[i].type == SENSOR_NTC) {
@@ -543,40 +550,51 @@ esp_err_t live_values_get_handler(httpd_req_t *req) {
                 board_cfg.channels[i].pullup_ohms > 0) {
                 float v_ntc = (float)voltages_copy[i] / 1000.0f;
                 float v_ref = (float)v5_ref / 1000.0f;
-                float r_ntc_f = ((float)board_cfg.channels[i].pullup_ohms * v_ntc) / (v_ref - v_ntc);
-                r_ntc = (int32_t)(r_ntc_f + 0.5f);
+                float r_eq_f = ((float)board_cfg.channels[i].pullup_ohms * v_ntc) / (v_ref - v_ntc);
+                float denom = (float)DIVIDER_TOTAL_OHM - r_eq_f;
+                if (denom > 0.0f) {
+                    float r_ntc_f = (r_eq_f * (float)DIVIDER_TOTAL_OHM) / denom;
+                    r_ntc = (int32_t)(r_ntc_f + 0.5f);
+                }
             }
 
             if (temp_c == (int16_t)-128) {
-                json_pos += snprintf(json + json_pos, json_max - json_pos,
+                written = snprintf(json + json_pos, json_max - json_pos,
                     "%s{\"voltage_v\":%.2f,\"value\":\"\"}",
                     i ? "," : "", voltage_v);
             } else {
                 if (r_ntc >= 0) {
-                    json_pos += snprintf(json + json_pos, json_max - json_pos,
+                    written = snprintf(json + json_pos, json_max - json_pos,
                         "%s{\"voltage_v\":%.2f,\"value\":\"%d C (%ld ohm)\"}",
                         i ? "," : "", voltage_v, (int)temp_c, (long)r_ntc);
                 } else {
-                    json_pos += snprintf(json + json_pos, json_max - json_pos,
+                    written = snprintf(json + json_pos, json_max - json_pos,
                         "%s{\"voltage_v\":%.2f,\"value\":\"%d C\"}",
                         i ? "," : "", voltage_v, (int)temp_c);
                 }
             }
         } else {
-            json_pos += snprintf(json + json_pos, json_max - json_pos,
+            written = snprintf(json + json_pos, json_max - json_pos,
                 "%s{\"voltage_v\":%.2f,\"value\":\"\"}",
                 i ? "," : "", voltage_v);
         }
 
-        if (json_pos >= json_max - 96) {
-            ESP_LOGE(TAG, "JSON buffer overflow in live values");
+        if (written < 0 || (size_t)written >= (json_max - json_pos)) {
+            ESP_LOGE(TAG, "JSON buffer overflow in live values (channel %d)", i);
             free(json);
             httpd_resp_send_500(req);
             return ESP_FAIL;
         }
+        json_pos += (size_t)written;
     }
 
-    snprintf(json + json_pos, json_max - json_pos, "]}\n");
+    written = snprintf(json + json_pos, json_max - json_pos, "]}\n");
+    if (written < 0 || (size_t)written >= (json_max - json_pos)) {
+        ESP_LOGE(TAG, "Failed to finalize live values JSON");
+        free(json);
+        httpd_resp_send_500(req);
+        return ESP_FAIL;
+    }
     httpd_resp_set_type(req, "application/json");
     httpd_resp_send(req, json, strlen(json));
     free(json);

@@ -251,7 +251,8 @@ uint16_t getSensorPressure(int v_mv, int v_min_mv, int v_max_mv, float p_min, fl
  * @brief Calculates temperature from voltage using NTC thermistor lookup table.
  *
  * Converts a measured voltage to temperature using a voltage divider circuit with
- * a known pull-up resistor. Calculates NTC resistance from voltage, then interpolates
+ * a known pull-up resistor. Calculates apparent resistance from voltage, removes
+ * fixed board input loading (5k1 + 10k path to ground), then interpolates
  * temperature from the provided lookup table.
  *
  * @param v_mv Measured voltage across NTC in millivolts
@@ -266,6 +267,8 @@ uint16_t getSensorPressure(int v_mv, int v_min_mv, int v_max_mv, float p_min, fl
  * @note Table must be sorted in descending order of resistance.
  *       Performs linear interpolation between table points.
  *       Input validation: v_mv must be in (0, v_ref_mv), r_pullup > 0, table != NULL
+ *       Compensation assumes each NTC channel sees the fixed board load
+ *       DIVIDER_TOTAL_OHM to ground.
  */
 int16_t getSensorTemperature(int v_mv, int r_pullup, int v_ref_mv, const ntc_point_t *table, size_t table_size) {
     if (r_pullup <= 0 || v_ref_mv <= 0 || table == NULL || table_size < 2)
@@ -281,6 +284,15 @@ int16_t getSensorTemperature(int v_mv, int r_pullup, int v_ref_mv, const ntc_poi
     float v_ntc = v_mv / 1000.0f;
     float v_ref = v_ref_mv / 1000.0f;
     float r_ntc_f = (r_pullup * v_ntc) / (v_ref - v_ntc);
+
+    // Remove fixed board input loading to recover true NTC resistance.
+    const float r_input_load = (float)DIVIDER_TOTAL_OHM;
+    float denom = r_input_load - r_ntc_f;
+    if (denom <= 0.0f) {
+        return table[0].temp_c;
+    }
+    r_ntc_f = (r_ntc_f * r_input_load) / denom;
+
     int32_t r_ntc = (int32_t)(r_ntc_f + 0.5f);
 
     if (r_ntc >= table[0].resistance) return table[0].temp_c;
