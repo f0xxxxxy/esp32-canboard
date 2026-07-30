@@ -220,7 +220,7 @@
     <script>
     const SENSOR_TYPES = ["Raw", "NTC", "Pressure"];
     const EMUB_TX_OPTIONS = ["Disabled", "CAN Analog 9", "CAN Analog 10", "CAN Analog 11", "CAN Analog 12", "CAN Analog 13", "CAN Analog 14", "CAN Analog 15", "CAN Analog 16"];
-    const NTC_TABLES = ["Bosch 0280130026", "Bosch TMAP 0281002437", "Universal 1/8 NPT"];
+    const NTC_TABLES = ["Bosch 0280130026", "Bosch TMAP 0281002437", "Universal 1/8 NPT", "FAE 33166", "Bosch 0280130055"];
     let config = null;
     const loadingOverlay = document.getElementById('loading-overlay');
     const overlayText = document.getElementById('overlay-text');
@@ -416,9 +416,13 @@
     async function refreshLiveValues() {
         try {
             const res = await fetch('/api/live_values', { cache: 'no-store' });
-            if (!res.ok) return;
+            if (!res.ok) {
+                throw new Error(`Live values HTTP ${res.status}`);
+            }
             const live = await res.json();
-            if (!live || !Array.isArray(live.channels)) return;
+            if (!live || !Array.isArray(live.channels)) {
+                throw new Error('Live values payload is invalid');
+            }
 
             for (let i = 0; i < 10; ++i) {
                 const ch = live.channels[i];
@@ -439,7 +443,15 @@
                 }
             }
         } catch (e) {
-            // Live update failures are non-fatal; keep current display values.
+            for (let i = 0; i < 10; ++i) {
+                const voltageEl = document.getElementById(`live-voltage-${i}`);
+                const valueEl = document.getElementById(`live-value-${i}`);
+                if (voltageEl) voltageEl.textContent = '--';
+                if (valueEl) valueEl.textContent = '';
+            }
+            if (window.console && console.warn) {
+                console.warn('refreshLiveValues failed:', e);
+            }
         }
     }
 

@@ -132,6 +132,24 @@ static const ntc_point_t universal_18_npt_points[] = {
     { 140,    21 }
 };
 
+// FAE 33166
+static const ntc_point_t fae_33166_points[] = {
+    { -40, 65667 }, { -30, 64789 }, { -20, 55180 }, { -10, 29488 },
+    {   0, 17657 }, {  10, 10765 }, {  20,  6599 }, {  30,  4076 },
+    {  40,  2600 }, {  50,  1800 }, {  60,  1260 }, {  70,   878 },
+    {  80,   626 }, {  90,   459 }, { 100,   353 }, { 110,   267 },
+    { 120,   205 }, { 130,   165 }, { 140,   130 }, { 150,   110 }
+};
+
+// Bosch 0280130055
+static const ntc_point_t bosch_ntc_0280130055_points[] = {
+    { -20, 13700 }, { -10,  8200 }, {   0,  5890 }, {  10,  3790 },
+    {  20,  2500 }, {  25,  2080 }, {  30,  1700 }, {  40,  1170 },
+    {  50,   830 }, {  60,   595 }, {  70,   425 }, {  80,   302 },
+    {  90,   231 }, { 100,   180 }, { 110,   139 }, { 120,   109 },
+    { 130,    86 }, { 140,    69 }, { 150,    56 }
+};
+
 // Array of available NTC tables for easy lookup and enumeration
 static const ntc_table_def_t ntc_tables[] = {
     {
@@ -151,6 +169,18 @@ static const ntc_table_def_t ntc_tables[] = {
         .description = "Universal 18 NPT (EFI Parts)",
         .points = universal_18_npt_points,
         .points_count = NTC_TABLE_SIZE(universal_18_npt_points)
+    },
+    {
+        .name = "FAE 33166",
+        .description = "FAE 33166",
+        .points = fae_33166_points,
+        .points_count = NTC_TABLE_SIZE(fae_33166_points)
+    },
+    {
+        .name = "Bosch 0280130055",
+        .description = "Bosch 0280130055",
+        .points = bosch_ntc_0280130055_points,
+        .points_count = NTC_TABLE_SIZE(bosch_ntc_0280130055_points)
     }
 };
 
