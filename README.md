@@ -1,12 +1,16 @@
 # ESP32-CANBoard
 * ESP32-S3 Dual Core SoC
 * MCP2562T CAN Transceiver (up to 1Mbps)
-* 16x 5V tolerant analog inputs via two ADS7830 I2C expanders.
-* 3x 5V power output pins for digital sensors, thermally fused at 500mA.
+* 16x 5V tolerant analog inputs via 2x ADS7830 I2C expanders.
+* Optional pull-up resistors via fused 5V rail for each input (TH 6.3mm).
+* 3x 5V power output pins for digital sensors.
+  * 500ma self-resetting thermal fuse.
+  * Output pins and pull-up rail only active with external power present, not USB.
 * USB-C for programming, with JTAG support for debugging.
 * ESD Protection on both USB and CAN, with reverse polarity protection on power input.
-* TE Connectivity AMP 26 Way Superseal Connector (PCB Socket: 9-6437287-8, Cable Plug: 3-1437290-7)
-* Optional pull-up resistors via fused 5V rail for each input (TH 6.3mm)
+* TE Connectivity AMP 26 Way Superseal Connector.
+  * PCB Socket: 9-6437287-8
+  * Cable Plug: 3-1437290-7
 * Internal 5V rail reference for accurate output calculation when pull-up in use.
 * Configuration via web interface over WiFi, with backup and restore functionality.
 * Optional per-channel median filtering with selectable strength (none/low/med/high) to reduce noise.
