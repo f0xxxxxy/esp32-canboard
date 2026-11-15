@@ -34,7 +34,8 @@ typedef enum {
 typedef enum {
     SENSOR_RAW = 0,
     SENSOR_NTC = 1,
-    SENSOR_PRESSURE = 2
+    SENSOR_PRESSURE = 2,
+    SENSOR_AD8495 = 3
 } sensor_type_t;
 
 /// Per-channel configuration structure
@@ -56,6 +57,8 @@ typedef struct {
         } pressure;
         struct { ///< Raw voltage measurement (no conversion)
         } raw;
+        struct { ///< AD8495 EGT amplifier (fixed transfer function)
+        } ad8495;
     } params;
 } channel_config_t;
 

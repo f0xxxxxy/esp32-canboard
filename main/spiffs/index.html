@@ -218,9 +218,9 @@
         </div>
     </div>
     <script>
-    const SENSOR_TYPES = ["Raw", "NTC", "Pressure"];
+    const SENSOR_TYPES = ["Raw", "NTC", "Pressure", "AD8495"];
     const EMUB_TX_OPTIONS = ["Disabled", "CAN Analog 9", "CAN Analog 10", "CAN Analog 11", "CAN Analog 12", "CAN Analog 13", "CAN Analog 14", "CAN Analog 15", "CAN Analog 16"];
-    const NTC_TABLES = ["Bosch 0280130026", "Bosch TMAP 0281002437", "Universal 1/8 NPT", "FAE 33166", "Bosch 0280130055"];
+    const NTC_TABLES = ["Bosch 0280130026", "Bosch TMAP 0281002437", "Bosch 0261230340 (P+T)", "Universal 1/8 NPT", "FAE 33166", "Bosch 0280130055"];
     let config = null;
     const loadingOverlay = document.getElementById('loading-overlay');
     const overlayText = document.getElementById('overlay-text');
@@ -301,9 +301,9 @@
         for (let i = 0; i < 10; ++i) {
             const name = form[`name${i}`].value.trim();
             if (!name) error += `Channel ${i+1}: Name required. `;
-            const pullup = parseInt(form[`pullup${i}`].value);
-            if (isNaN(pullup) || pullup < 0 || pullup > 100000) error += `Channel ${i+1}: Pullup invalid. `;
             const type = parseInt(form[`type${i}`].value);
+            const pullup = parseInt(form[`pullup${i}`].value);
+            if (type === 1 && (isNaN(pullup) || pullup <= 0 || pullup > 100000)) error += `Channel ${i+1}: Pullup invalid. `;
             const emubTx = parseInt(form[`emubtx${i}`].value);
             if (isNaN(emubTx) || emubTx < 0 || emubTx > 8) {
                 error += `Channel ${i+1}: EMUB TX invalid. `;
@@ -476,20 +476,30 @@
         }
         for (let i = 0; i < 10; ++i) {
             config.channels[i].name = form[`name${i}`].value.trim();
-            config.channels[i].pullup_ohms = parseInt(form[`pullup${i}`].value);
             config.channels[i].type = parseInt(form[`type${i}`].value);
-            config.channels[i].filtering = parseInt(form[`filtering${i}`].value);
             config.channels[i].emub_tx = parseInt(form[`emubtx${i}`].value) || 0;
             config.channels[i].params = {};
             if (config.channels[i].type === 1) {
+                config.channels[i].pullup_ohms = parseInt(form[`pullup${i}`].value);
+                config.channels[i].filtering = 0;
                 config.channels[i].params.ntc = { table_id: parseInt(form[`ntc${i}`].value) };
             } else if (config.channels[i].type === 2) {
+                config.channels[i].pullup_ohms = 0;
+                config.channels[i].filtering = parseInt(form[`filtering${i}`].value);
                 config.channels[i].params.pressure = {
                     min_mv: parseInt(form[`pminmv${i}`].value),
                     max_mv: parseInt(form[`pmaxmv${i}`].value),
                     min_kpa: parseFloat(form[`pminkpa${i}`].value),
                     max_kpa: parseFloat(form[`pmaxkpa${i}`].value)
                 };
+            } else if (config.channels[i].type === 3) {
+                config.channels[i].pullup_ohms = 0;
+                config.channels[i].filtering = 0;
+                config.channels[i].params.ad8495 = {};
+            } else {
+                config.channels[i].pullup_ohms = 0;
+                config.channels[i].filtering = 0;
+                config.channels[i].params.raw = {};
             }
         }
         // Read pull-up Vref

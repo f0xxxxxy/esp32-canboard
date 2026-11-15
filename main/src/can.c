@@ -84,6 +84,7 @@ esp_err_t can_init(void) {
  *  - Raw: output 0 (uint16)
  *  - Pressure: unsigned uint16 = pressure_kPa * 100 (factor 0.01)
  *  - NTC: signed int16 = temperature_C * 1 (factor 1)
+ *  - AD8495: signed int16 = temperature_C * 1 (factor 1)
  *
  * Voltages are encoded as uint16_t little-endian with 0.001 V scale (i.e., mV
  * stored directly). Endianness: little-endian (LSB first) for multi-byte fields.
@@ -180,6 +181,9 @@ void canTransmit(void *arg)
                 if (temp == (int8_t)-128) temp = 0;
                 int16_t t16 = (int16_t)temp;
                 dyn[i] = (uint16_t)((uint16_t)t16 & 0xFFFF);
+            } else if (board_cfg.channels[i].type == SENSOR_AD8495) {
+                int16_t temp = getSensorAd8495Temperature(voltages_copy[i]);
+                dyn[i] = (uint16_t)((uint16_t)temp & 0xFFFF);
             } else {
                 dyn[i] = 0;
             }

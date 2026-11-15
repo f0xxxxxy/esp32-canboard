@@ -146,6 +146,24 @@ uint16_t getSensorPressure(int v_mv, int v_min_mv, int v_max_mv, float p_min, fl
 }
 
 /**
+ * @brief Calculates AD8495 temperature from voltage.
+ *
+ * Uses fixed linear transfer function from the provided calibration points:
+ * 1.25 V -> 0 °C and 4.75 V -> 700 °C.
+ *
+ * @param v_mv Measured voltage in millivolts
+ *
+ * @return Temperature in degrees Celsius (int16_t), clamped to [0, 700]
+ */
+int16_t getSensorAd8495Temperature(int v_mv)
+{
+    float temp_c = ((float)v_mv - 1250.0f) * 0.2f;
+    if (temp_c < 0.0f) temp_c = 0.0f;
+    if (temp_c > 700.0f) temp_c = 700.0f;
+    return (int16_t)(temp_c + 0.5f);
+}
+
+/**
  * @brief Calculates temperature from voltage using NTC thermistor lookup table.
  *
  * Converts a measured voltage to temperature using a voltage divider circuit with
