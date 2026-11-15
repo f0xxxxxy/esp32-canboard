@@ -226,8 +226,8 @@
         </div>
     </div>
     <script>
-    const SENSOR_TYPES = ["Raw", "NTC", "Pressure"];
-    const NTC_TABLES = ["Bosch 0280130026", "Bosch TMAP 0281002437", "Universal 1/8 NPT", "FAE 33166", "Bosch 0280130055"];
+    const SENSOR_TYPES = ["Raw", "NTC", "Pressure", "AD8495"];
+    const NTC_TABLES = ["Bosch 0280130026", "Bosch TMAP 0281002437", "Bosch 0261230340 (P+T)", "Universal 1/8 NPT", "FAE 33166", "Bosch 0280130055"];
 
     // Unit conversion helpers: UI displays values in the selected unit
     // but configuration is stored canonically in kPa. Use these helpers
@@ -374,11 +374,11 @@
             const nameEl = getFormElem(`name${i}`);
             const name = nameEl ? nameEl.value.trim() : '';
             if (!name) error += `Channel ${i+1}: Name required. `;
-            const pullupEl = getFormElem(`pullup${i}`);
-            const pullup = pullupEl ? parseInt(pullupEl.value) : NaN;
-            if (isNaN(pullup) || pullup < 0 || pullup > 100000) error += `Channel ${i+1}: Pullup invalid. `;
             const typeEl = getFormElem(`type${i}`);
             const type = typeEl ? parseInt(typeEl.value) : 0;
+            const pullupEl = getFormElem(`pullup${i}`);
+            const pullup = pullupEl ? parseInt(pullupEl.value) : NaN;
+            if (type === 1 && (isNaN(pullup) || pullup <= 0 || pullup > 100000)) error += `Channel ${i+1}: Pullup invalid. `;
             if (type === 1) { // NTC
                 const ntcEl = getFormElem(`ntc${i}`);
                 if (!ntcEl || isNaN(parseInt(ntcEl.value))) error += `Channel ${i+1}: NTC table invalid. `;
@@ -707,14 +707,16 @@
             const typeEl = getFormElem(`type${i}`);
             const filtEl = getFormElem(`filtering${i}`);
             config.channels[i].name = nameEl ? nameEl.value.trim() : '';
-            config.channels[i].pullup_ohms = pullupEl ? parseInt(pullupEl.value) : 0;
             config.channels[i].type = typeEl ? parseInt(typeEl.value) : 0;
-            config.channels[i].filtering = filtEl ? parseInt(filtEl.value) : 0;
             config.channels[i].params = {};
                 if (config.channels[i].type === 1) {
+                    config.channels[i].pullup_ohms = pullupEl ? parseInt(pullupEl.value) : 0;
+                    config.channels[i].filtering = 0;
                     const ntcEl = getFormElem(`ntc${i}`);
                     config.channels[i].params.ntc = { table_id: ntcEl ? parseInt(ntcEl.value) : 0 };
                 } else if (config.channels[i].type === 2) {
+                    config.channels[i].pullup_ohms = 0;
+                    config.channels[i].filtering = filtEl ? parseInt(filtEl.value) : 0;
                     const minmvEl = getFormElem(`pminmv${i}`);
                     const maxmvEl = getFormElem(`pmaxmv${i}`);
                     const minkpaEl = getFormElem(`pminkpa${i}`);
@@ -745,6 +747,14 @@
                         max_kpa: max_kpa_value,
                         pressure_unit: punitEl ? parseInt(punitEl.value) : 0
                     };
+            } else if (config.channels[i].type === 3) {
+                config.channels[i].pullup_ohms = 0;
+                config.channels[i].filtering = 0;
+                config.channels[i].params.ad8495 = {};
+            } else {
+                config.channels[i].pullup_ohms = 0;
+                config.channels[i].filtering = 0;
+                config.channels[i].params.raw = {};
             }
         }
         try {

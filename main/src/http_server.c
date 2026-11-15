@@ -194,6 +194,8 @@ esp_err_t config_get_handler(httpd_req_t *req) {
                 cfg.channels[i].params.pressure.min_kpa,
                 cfg.channels[i].params.pressure.max_kpa,
                 (unsigned int)cfg.channels[i].params.pressure.pressure_unit);
+        } else if (cfg.channels[i].type == SENSOR_AD8495) {
+            json_pos += snprintf(json + json_pos, json_max - json_pos, "\"ad8495\":{}}}");
         } else {
             json_pos += snprintf(json + json_pos, json_max - json_pos, "\"raw\":{}}}");
         }
@@ -306,6 +308,9 @@ esp_err_t config_post_handler(httpd_req_t *req) {
         cfg.channels[i].name[CONFIG_NAME_LEN - 1] = 0;
         cfg.channels[i].pullup_ohms = (uint32_t)pullup->valueint;
         cfg.channels[i].type = (sensor_type_t)type->valueint;
+        if (cfg.channels[i].type > SENSOR_AD8495) {
+            cfg.channels[i].type = SENSOR_RAW;
+        }
         if (filtering && cJSON_IsNumber(filtering)) {
             int lvl = filtering->valueint;
             if (lvl < FILTER_NONE) lvl = FILTER_NONE;
@@ -369,6 +374,9 @@ esp_err_t config_post_handler(httpd_req_t *req) {
             } else {
                 cfg.channels[i].params.pressure.pressure_unit = UNIT_KPA;
             }
+        } else {
+            cfg.channels[i].pullup_ohms = 0;
+            cfg.channels[i].filtering = FILTER_NONE;
         }
     }
     
@@ -573,6 +581,11 @@ esp_err_t live_values_get_handler(httpd_req_t *req) {
                         i ? "," : "", voltage_v, (int)temp_c);
                 }
             }
+        } else if (board_cfg.channels[i].type == SENSOR_AD8495) {
+            int16_t temp_c = getSensorAd8495Temperature(voltages_copy[i]);
+            written = snprintf(json + json_pos, json_max - json_pos,
+                "%s{\"voltage_v\":%.2f,\"value\":\"%d C\"}",
+                i ? "," : "", voltage_v, (int)temp_c);
         } else {
             written = snprintf(json + json_pos, json_max - json_pos,
                 "%s{\"voltage_v\":%.2f,\"value\":\"\"}",
@@ -643,6 +656,8 @@ esp_err_t config_export_get_handler(httpd_req_t *req) {
                 cfg.channels[i].params.pressure.min_kpa,
                 cfg.channels[i].params.pressure.max_kpa,
                 (unsigned int)cfg.channels[i].params.pressure.pressure_unit);
+        } else if (cfg.channels[i].type == SENSOR_AD8495) {
+            json_pos += snprintf(json + json_pos, json_max - json_pos, "\"ad8495\":{}}}");
         } else {
             json_pos += snprintf(json + json_pos, json_max - json_pos, "\"raw\":{}}}");
         }
@@ -751,6 +766,9 @@ esp_err_t config_import_post_handler(httpd_req_t *req) {
         cfg.channels[i].name[CONFIG_NAME_LEN - 1] = 0;
         cfg.channels[i].pullup_ohms = (uint32_t)pullup->valueint;
         cfg.channels[i].type = (sensor_type_t)type->valueint;
+        if (cfg.channels[i].type > SENSOR_AD8495) {
+            cfg.channels[i].type = SENSOR_RAW;
+        }
         if (filtering && cJSON_IsNumber(filtering)) {
             int lvl = filtering->valueint;
             if (lvl < FILTER_NONE) lvl = FILTER_NONE;
@@ -819,6 +837,9 @@ esp_err_t config_import_post_handler(httpd_req_t *req) {
             } else {
                 cfg.channels[i].params.pressure.pressure_unit = UNIT_KPA;
             }
+        } else {
+            cfg.channels[i].pullup_ohms = 0;
+            cfg.channels[i].filtering = FILTER_NONE;
         }
     }
 

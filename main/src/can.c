@@ -143,6 +143,9 @@ void canTransmit(void *arg)
                                                    t ? t->points : NULL, t ? t->points_count : 0);
                 if (temp == (int16_t)-128) temp = 0;
                 dyn[i] = (uint16_t)((int16_t)temp);
+            } else if (board_cfg.channels[i].type == SENSOR_AD8495) {
+                int16_t temp = getSensorAd8495Temperature(voltages_copy[i]);
+                dyn[i] = (uint16_t)((int16_t)temp);
             } else {
                 dyn[i] = 0;
             }

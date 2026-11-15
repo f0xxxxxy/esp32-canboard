@@ -122,6 +122,13 @@ int16_t getSensorTemperature(int v_mv, int r_pullup, int v_ref_mv, const ntc_poi
 uint16_t getSensorPressure(int v_mv, int v_min_mv, int v_max_mv, float p_min, float p_max);
 
 /**
+ * @brief Convert AD8495 amplifier voltage to EGT temperature.
+ * @param v_mv Measured voltage in millivolts.
+ * @return Temperature in degC (clamped to 0..700).
+ */
+int16_t getSensorAd8495Temperature(int v_mv);
+
+/**
  * @brief Read raw ADC value and apply calibration with optional scaling.
  * @param channel ADC channel to read.
  * @param scaled If true, apply scaling_factor.
@@ -168,6 +175,13 @@ static const ntc_point_t bosch_tmap_0281002437_points[] = { // Bosch TMAP 028100
     { 140,   73 }, { 145,   65 }, { 150,   58 }
 };
 
+static const ntc_point_t bosch_pt_0261230340_points[] = { // Bosch 0261230340 (P+T), linearly interpolated 0..120C
+    {   0,  5784 }, {  10,  4919 }, {  20,  4054 }, {  30,  3189 },
+    {  40,  2324 }, {  50,  1459 }, {  60,   594 }, {  70,   506 },
+    {  80,   418 }, {  90,   330 }, { 100,   243 }, { 110,   155 },
+    { 111,   146 }, { 120,    67 }
+};
+
 static const ntc_point_t universal_18_npt_points[] = { // Universal 1/8 NPT
     {  20,   850 }, {  25,   640 }, {  30,   540 }, {  35,   430 },
     {  40,   360 }, {  45,   290 }, {  50,   240 }, {  55,   200 },
@@ -207,6 +221,12 @@ static const ntc_table_def_t ntc_tables[] = {
         .description = "Bosch TMAP 0281002437 (BMW TMAP 13627843531)",
         .points = bosch_tmap_0281002437_points,
         .points_count = NTC_TABLE_SIZE(bosch_tmap_0281002437_points)
+    },
+    {
+        .name = "Bosch 0261230340 (P+T)",
+        .description = "Bosch pressure + temperature sensor 0261230340",
+        .points = bosch_pt_0261230340_points,
+        .points_count = NTC_TABLE_SIZE(bosch_pt_0261230340_points)
     },{
         .name = "Universal 1/8 NPT",
         .description = "Universal 18 NPT (EFI Parts)",
