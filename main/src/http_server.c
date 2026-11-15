@@ -535,7 +535,12 @@ esp_err_t live_values_get_handler(httpd_req_t *req) {
                     i ? "," : "", voltage_v);
             } else {
                 if (r_ntc >= 0) {
-                    written = snprintf(json + json_pos, json_max - json_pos,`r`n                        "%s{\"voltage_v\":%.2f,\"value\":\"%d \\xC2\\xB0" "C (%ld \\xCE\\xA9)\"}",`r`n                        i ? "," : "", voltage_v, (int)temp_c, (long)r_ntc);`r`n                } else {`r`n                    written = snprintf(json + json_pos, json_max - json_pos,`r`n                        "%s{\"voltage_v\":%.2f,\"value\":\"%d \\xC2\\xB0" "C\"}",
+                    written = snprintf(json + json_pos, json_max - json_pos,
+                        "%s{\"voltage_v\":%.2f,\"value\":\"%d \\xC2\\xB0" "C (%ld \\xCE\\xA9)\"}",
+                        i ? "," : "", voltage_v, (int)temp_c, (long)r_ntc);
+                } else {
+                    written = snprintf(json + json_pos, json_max - json_pos,
+                        "%s{\"voltage_v\":%.2f,\"value\":\"%d \\xC2\\xB0" "C\"}",
                         i ? "," : "", voltage_v, (int)temp_c);
                 }
             }
