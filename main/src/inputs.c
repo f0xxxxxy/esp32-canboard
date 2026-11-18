@@ -440,44 +440,66 @@ uint16_t medianFilterHelper(uint16_t *samples, int count) {
  *       Updates global filtered_voltages[] array (protected by filtered_voltages_mutex).
  *       Scaling formula: (pullup_ohms + 14.7k) / 14.7k when pullup present
  *       Scaling formula: 14.7k / 10k = 1.47 when no pullup
- *       Loop timing: ~10 ms between complete channel cycles
+ *       Loop timing is determined by the time required to scan all channels.
  *
  * @see filtered_voltages, filtered_voltages_mutex, board_cfg.channels[].filtering
  */
 void adcProcess(void *arg) {
     ESP_LOGI(adc_log, "ADC Processing Task Started");
-    // allocate buffer using maximum possible depth
+    uint16_t history[NUM_ANALOG_INPUTS][FILTER_DEPTH_MAX] = {{0}};
+    uint8_t history_count[NUM_ANALOG_INPUTS] = {0};
+    uint8_t history_next[NUM_ANALOG_INPUTS] = {0};
+    uint8_t history_depth[NUM_ANALOG_INPUTS] = {0};
     uint16_t samples[FILTER_DEPTH_MAX];
-    
+
     while (1) {
         for (int ch = 0; ch < NUM_ANALOG_INPUTS; ch++) {
             int depth = FILTER_DEPTH_MED;
-            if (board_cfg.channels[ch].filtering == FILTER_LOW) depth = FILTER_DEPTH_LOW;
-            if (board_cfg.channels[ch].filtering == FILTER_HIGH) depth = FILTER_DEPTH_HIGH;
-
-            bool sample_valid = true;
-            for (int i = 0; i < depth; ++i) {
-                if (!read_analog_raw(ch, &samples[i]) || samples[i] == 0) {
-                    sample_valid = false;
-                }
-                vTaskDelay(pdMS_TO_TICKS(2));
+            switch (board_cfg.channels[ch].filtering) {
+                case FILTER_NONE:
+                    depth = 1;
+                    break;
+                case FILTER_LOW:
+                    depth = FILTER_DEPTH_LOW;
+                    break;
+                case FILTER_HIGH:
+                    depth = FILTER_DEPTH_HIGH;
+                    break;
+                case FILTER_MED:
+                default:
+                    break;
             }
 
-            if (sample_valid) {
-                uint16_t filtered = medianFilterHelper(samples, depth);
-                if (xSemaphoreTake(filtered_voltages_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
-                    filtered_voltages[ch] = filtered;
-                    xSemaphoreGive(filtered_voltages_mutex);
-                }
-            } else {
+            if (history_depth[ch] != depth) {
+                history_depth[ch] = (uint8_t)depth;
+                history_count[ch] = 0;
+                history_next[ch] = 0;
+            }
+
+            uint16_t sample = 0;
+            if (!read_analog_raw(ch, &sample) || sample == 0) {
+                history_count[ch] = 0;
+                history_next[ch] = 0;
                 if (xSemaphoreTake(filtered_voltages_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
                     filtered_voltages[ch] = 0;
                     xSemaphoreGive(filtered_voltages_mutex);
                 }
+                continue;
+            }
+
+            history[ch][history_next[ch]] = sample;
+            history_next[ch] = (history_next[ch] + 1) % depth;
+            if (history_count[ch] < depth) {
+                ++history_count[ch];
+            }
+
+            memcpy(samples, history[ch], history_count[ch] * sizeof(samples[0]));
+            uint16_t filtered = medianFilterHelper(samples, history_count[ch]);
+            if (xSemaphoreTake(filtered_voltages_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+                filtered_voltages[ch] = filtered;
+                xSemaphoreGive(filtered_voltages_mutex);
             }
         }
-
-        vTaskDelay(pdMS_TO_TICKS(10));
     }
     vTaskDelete(NULL);
 }
